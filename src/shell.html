@@ -98,7 +98,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 <div class="app">
   <header class="top">
     <h1 class="brand">Knotenpunkt</h1>
-    <p class="claim">Wie viele Stäbe braucht das Tragwerk, als Fachwerk mit Gelenken oder als Rahmen mit steifen Knoten?</p>
+    <p class="claim">Wie leicht geht es? Bauen Sie ein Tragwerk aus Stäben und rechnen Sie es als Fachwerk mit Gelenken oder als Rahmen mit steifen Knoten.</p>
     <nav class="levels" id="levels" aria-label="Bauteil wählen"></nav>
   </header>
 
@@ -106,18 +106,18 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
     <section class="sheet" aria-label="Zeichnung">
       <div id="drawing">
         <div class="sheet-head">
-          <p class="howto" id="howto"><b>Antippen</b> nimmt einen Stab weg oder setzt ihn wieder ein. <b>Rechteck aufziehen</b> wechselt alle Stäbe darin,
-            mit dem <b>Pinsel</b> überstreichen Sie Stäbe, die <b>Linie</b> zieht von Knoten zu Knoten waagrecht, senkrecht oder unter 45°.
-            Beginnen Sie auf einer freien Rasterlinie, kommen Stäbe dazu, sonst werden sie entfernt. „Alles leeren“ lässt nur die gesperrten Stäbe stehen: dann bauen Sie selbst.
-            Tasten R, P und L wechseln das Werkzeug. Beim Abgeben rechnet die FEM: Hält das Tragwerk, zählt jedes eingesparte Kilogramm, versagt es, zählt nichts.</p>
-          <div class="tools" id="tools" role="group" aria-label="Werkzeug">
-            <button type="button" id="t-rect" aria-pressed="true" title="Taste R: Antippen oder Rechteck aufziehen">Rechteck</button>
-            <button type="button" id="t-brush" aria-pressed="false" title="Taste P">Pinsel</button>
-            <button type="button" id="t-line" aria-pressed="false" title="Taste L: von Knoten zu Knoten ziehen">Linie</button>
+          <p class="howto" id="howto"><b>Ziehen</b> Sie von Knoten zu Knoten, waagrecht, senkrecht oder unter 45°: Die Linie wird zu Stäben im gewählten Profil.
+            Beginnt der Zug auf einem Stab, der schon in diesem Profil daliegt, nimmt er die Stäbe entlang der Linie weg.
+            <b>Antippen</b> setzt einen einzelnen Stab oder nimmt ihn weg, mit einem anderen Profil gewählt bekommt er dieses Profil.
+            Dicke Profile tragen mehr, wiegen aber mehr. Beim Abgeben rechnet die FEM: Gewertet wird die Masse, wenn das Tragwerk hält.</p>
+          <div class="tools" id="profiles" role="group" aria-label="Profil zum Zeichnen">
+            <button type="button" id="pr-1" aria-pressed="true">40 × 3</button>
+            <button type="button" id="pr-2" aria-pressed="false">60 × 4</button>
+            <button type="button" id="pr-3" aria-pressed="false">80 × 5</button>
           </div>
         </div>
         <div class="canvas-wrap" id="wrap">
-          <canvas id="cv" aria-label="Stabwerk im Raster: Stäbe antippen, um sie zu entfernen oder einzusetzen"></canvas>
+          <canvas id="cv" aria-label="Stabwerk im Raster: von Knoten zu Knoten ziehen, um Stäbe zu zeichnen, antippen, um einen Stab zu setzen oder wegzunehmen"></canvas>
           <div class="stamp" id="stamp" hidden></div>
         </div>
         <div class="legend" id="legend" hidden></div>
@@ -130,12 +130,11 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <tbody>
           <tr><th>Benennung</th><td id="tb-name"></td></tr>
           <tr><th>Werkstoff</th><td>S235, Re = 235 MPa</td></tr>
-          <tr><th>Profil</th><td id="tb-profile"></td></tr>
+          <tr><th>Profile</th><td>Quadratrohr, mm</td></tr>
           <tr><th>Belastung</th><td id="tb-load"></td></tr>
           <tr><th>Abmessungen</th><td id="tb-size"></td></tr>
           <tr><th>Stäbe</th><td id="tb-bars"></td></tr>
-          <tr><th>Masse</th><td id="tb-mass"></td></tr>
-          <tr><th>Eingespart</th><td class="big" id="tb-removed"></td></tr>
+          <tr><th>Masse</th><td class="big" id="tb-mass"></td></tr>
           <tr><th>Probe-Rechnung</th><td id="tb-probe"></td></tr>
           <tr><th>Blatt</th><td id="tb-sheet"></td></tr>
         </tbody>
@@ -153,8 +152,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           <button class="btn primary" id="b-submit" type="button">Abgeben und rechnen</button>
           <button class="btn" id="b-probe" type="button">Probe-Rechnung</button>
           <button class="btn" id="b-undo" type="button">Rückgängig</button>
-          <button class="btn" id="b-reset" type="button">Alles zurück</button>
           <button class="btn" id="b-clear" type="button">Alles leeren</button>
+          <button class="btn" id="b-full" type="button" title="Vorlage: jedes Rasterfeld mit vier Randstäben und zwei Diagonalen im gewählten Profil">Volles Raster</button>
         </div>
         <div class="actions" id="act-result" hidden>
           <button class="btn primary" id="b-retry" type="button">Neuer Versuch</button>
@@ -164,18 +163,25 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 
         <div class="verdict" id="verdict" aria-live="polite"></div>
 
-        <label class="live" id="live-row"><input type="checkbox" id="live"> Auslastung live zeigen (Übungsmodus)</label>
+        <div class="model" role="group" aria-label="Beim Zeichnen live zeigen">
+          <span>Live</span>
+          <span class="tools">
+            <button type="button" id="lv-aus" aria-pressed="false">Aus</button>
+            <button type="button" id="lv-verformung" aria-pressed="true" title="Verformung beim Zeichnen, fester Maßstab je Bauteil">Verformung</button>
+            <button type="button" id="lv-auslastung" aria-pressed="false" title="Übungsmodus: Verformung und Auslastung beim Zeichnen">Auslastung</button>
+          </span>
+        </div>
 
         <details class="rules">
           <summary>So wird gerechnet</summary>
           <ul>
-            <li>Alle Stäbe sind Quadratrohre 40 × 40 × 3 aus S235: A = 444 mm², I = 10,2 cm⁴, W = 5,1 cm³, E = 210 GPa. Das Raster ist 1 m weit.</li>
+            <li>Stäbe aus Quadratrohr, Stahl S235, E = 210 GPa, Raster 1 m. Drei Profile: 40 × 3 (A = 4,4 cm², W = 5,1 cm³, 3,5 kg/m), 60 × 4 (9,0 cm², 15,7 cm³, 7,0 kg/m), 80 × 5 (15,0 cm², 35,3 cm³, 11,8 kg/m). Biegesteifigkeit und Knicklast wachsen schneller als die Masse.</li>
             <li><b>Fachwerk:</b> Die Knoten sind Gelenke (Kreise), die Stäbe tragen nur Normalkraft. Jeder Stab ist ein Federelement mit EA / L. Ein Feld ohne Diagonale verschiebt sich: Das Fachwerk ist beweglich.</li>
-            <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, aber weich.</li>
+            <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, braucht dafür aber dicke Profile.</li>
             <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst. Ob das Stabwerk beweglich ist, zeigen sehr weiche Hilfsfedern an jedem Knoten: Nehmen sie einen spürbaren Teil der Arbeit der Last auf, ist es ein Mechanismus.</li>
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager sitzt.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden tragen nichts, zählen aber bei der Masse.</li>
-            <li>Gegner ist die Evolutionäre Strukturoptimierung (ESO): Sie entfernt immer den am geringsten ausgelasteten Stab, solange das Tragwerk hält.</li>
+            <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird.</li>
           </ul>
         </details>
         <details class="rules">

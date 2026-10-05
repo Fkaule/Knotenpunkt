@@ -1,13 +1,21 @@
 # Knotenpunkt
 
-Stabwerk-Minispiel, abgeleitet von [Knackpunkt](https://github.com/Fkaule/Knackpunkt): Statt Kacheln aus einem Blech nehmen Sie Stäbe aus einem Raster (oder bauen nach „Alles leeren“ selbst, wie im Bridge Builder). Eine FE-Rechnung im Browser zeigt, ob das Tragwerk hält. Gewertet wird die eingesparte Masse, wenn es hält, sonst null.
+Stabwerk-Minispiel, abgeleitet von [Knackpunkt](https://github.com/Fkaule/Knackpunkt): Sie bauen ein Tragwerk aus Stäben, wie im Bridge Builder, und eine FE-Rechnung im Browser zeigt, ob es hält. Gewertet wird die Masse in Kilogramm, wenn es hält; je leichter, desto besser.
 
 Dasselbe Stabwerk lässt sich auf zwei Arten rechnen, im Ergebnis schalten Sie zwischen beiden um:
 
 - **Fachwerk:** Knoten sind Gelenke, Stäbe tragen nur Normalkraft. Ohne Dreiecke ist es beweglich.
-- **Rahmen:** Knoten sind biegesteif, Stäbe sind Balken. Felder ohne Diagonale tragen über Biegung, aber weich; in Fachwerken zeigt diese Ansicht die Nebenspannungen.
+- **Rahmen:** Knoten sind biegesteif, Stäbe sind Balken. Felder ohne Diagonale tragen über Biegung, brauchen dafür aber dicke Profile; in Fachwerken zeigt diese Ansicht die Nebenspannungen.
 
 Spielen: https://fkaule.github.io/Knotenpunkt/
+
+## Bedienung
+
+- Ziehen von Knoten zu Knoten zeichnet eine Linie aus Stäben (waagrecht, senkrecht, unter 45°) im gewählten Profil. Beginnt der Zug auf einem Stab, der schon in diesem Profil daliegt, nimmt er die Stäbe entlang der Linie weg.
+- Antippen setzt einen Stab oder nimmt ihn weg; mit einem anderen Profil gewählt bekommt der Stab dieses Profil.
+- Drei Profile (Tasten 1 bis 3). Gesperrte Stäbe (Fahrbahn, Stützen und Riegel des Tors) bleiben, ihr Profil ist wählbar.
+- „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
+- Live beim Zeichnen: aus, Verformung (fester Maßstab je Bauteil, ein weicher Entwurf hängt sichtbar mehr durch) oder Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
 
 ## Lokal starten
 
@@ -16,11 +24,19 @@ npm run build
 python3 -m http.server 8913
 ```
 
-Dann http://localhost:8913/ öffnen. `npm test` prüft den FE-Kern, `node scripts/kalibrieren.js` zeigt Auslastung des vollen Stabwerks und Ergebnis des Algorithmus je Bauteil.
+Dann http://localhost:8913/ öffnen. `npm test` prüft den FE-Kern, `node scripts/kalibrieren.js` zeigt je Bauteil die Auslastung des vollen Rasters und das Ergebnis des Algorithmus.
 
 ## Wie gerechnet wird
 
-Raster 1 m, alle Stäbe Quadratrohr 40 × 40 × 3 aus S235 (scharfkantig): $`A = 444\ \text{mm}^2`$, $`I = 10{,}2\ \text{cm}^4`$, $`W = 5{,}1\ \text{cm}^3`$, $`E = 210\ \text{GPa}`$. Jedes Rasterfeld hat vier Randstäbe und zwei Diagonalen (kreuzend, ohne Knoten in der Mitte).
+Raster 1 m, Stäbe aus Quadratrohr, Stahl S235, $`E = 210\ \text{GPa}`$ (scharfkantig gerechnet):
+
+| Profil | A in mm² | I in cm⁴ | W in cm³ | Masse in kg/m |
+|---|---|---|---|---|
+| 40 × 40 × 3 | 444 | 10,2 | 5,1 | 3,5 |
+| 60 × 60 × 4 | 896 | 47,1 | 15,7 | 7,0 |
+| 80 × 80 × 5 | 1500 | 141,3 | 35,3 | 11,8 |
+
+Jedes Rasterfeld hat vier Randstäbe und zwei Diagonalen (kreuzend, ohne Knoten in der Mitte).
 
 **Fachwerkstab** (2 Freiheitsgrade je Knoten), Richtungskosinus $`c, s`$:
 
@@ -36,7 +52,7 @@ K_l = \begin{bmatrix} a & 0 & 0 & -a & 0 & 0 \\ 0 & k_1 & k_2 & 0 & -k_1 & k_2 \
 
 Lösung mit Band-Cholesky, Knoten entlang der kurzen Seite nummeriert.
 
-**Beweglich oder nicht:** An jedem freien Freiheitsgrad sitzt eine sehr weiche Feder ($`10^{-11}\,EA/a`$ bzw. $`10^{-11}\,EI/a`$). Sie hält die Matrix regulär. Nehmen die Federn mehr als 1 % der Arbeit der Last auf, ist das Stabwerk ein Mechanismus:
+**Beweglich oder nicht:** An jedem freien Freiheitsgrad sitzt eine sehr weiche Feder ($`10^{-11}\,EA/a`$ bzw. $`10^{-11}\,EI/a`$ des kleinsten Profils). Sie hält die Matrix regulär. Nehmen die Federn mehr als 1 % der Arbeit der Last auf, ist das Stabwerk ein Mechanismus:
 
 ```math
 \frac{\sum k_s u_i^2}{f^\mathsf{T} u} > 0{,}01
@@ -54,9 +70,9 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 
 **Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden (Knoten ohne Lager, Last und weiteren Stab) und Teile ohne Last tragen nichts und werden nicht gerechnet, zählen aber bei der Masse.
 
-**Gegner (ESO):** entfernt immer den am geringsten ausgelasteten Stab, der sich entfernen lässt, solange das Tragwerk hält; Stäbe, die nichts tragen, zuerst.
+**Gegner:** beginnt mit dem vollen Raster im mittleren Profil und bemisst es (fully stressed design: jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält; wiederholt, bis sich nichts mehr ändert, weil sich die Kräfte mit den Steifigkeiten umlagern). Dann entfernt er immer den am geringsten ausgelasteten Stab, bemisst neu und behält das Ergebnis, wenn es hält und leichter ist. Was beim Entfernen beweglich wird oder nicht mehr hält, versucht er nicht noch einmal.
 
-**Lasten:** so bemessen, dass das volle Stabwerk als Fachwerk zu gut 50 % ausgelastet ist (Brücke 9 × 17 kN, Kragarm 45 kN, Kran 19 kN).
+**Lasten:** Brücke 9 × 34 kN, Kragarm 90 kN, Kran 38 kN, so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu gut 50 % ausgelastet ist. Tor 5 kN Wind: Stützen und Riegel allein halten als Rahmen erst im dicksten Profil (106 kg), mit einer Diagonale schon im dünnsten (46 kg).
 
 ## Verifikation (`npm test`)
 
@@ -64,7 +80,8 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 - Zweistab: Stabkräfte aus dem Knotengleichgewicht, Auslastung aus Fließen und Knicken; Zugstab nur Fließen
 - Feld ohne Diagonale: als Fachwerk beweglich, als Rahmen tragfähig, Kopfverschiebung zwischen eingespanntem und gelenkigem Riegel
 - Lose Enden und abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab
-- Algorithmus: Ergebnis hält in beiden Modellen
+- Profile: Auslastung und Masse je Profil; Bemessen wählt das kleinste Profil, das hält
+- Algorithmus: Ergebnis hält in beiden Modellen und ist deutlich leichter als das volle Raster
 
 ## Was das Spiel vereinfacht
 

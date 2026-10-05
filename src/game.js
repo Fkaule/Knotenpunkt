@@ -1,6 +1,7 @@
-/* Spiel: Entwurf, Aufdecken als Fachwerk oder Rahmen, Gegner. Zeichnet auf ein Canvas im Stil einer technischen Zeichnung. */
+/* Spiel: Stabwerk zeichnen, als Fachwerk oder Rahmen rechnen, aufdecken, Gegner. Zeichnet auf ein Canvas im Stil einer
+   technischen Zeichnung. */
 (() => {
-  const { GRID, KG_MM } = FEM;
+  const { GRID, PROFILES } = FEM;
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d'), wrap = $('wrap');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -8,13 +9,14 @@
   const fmt = (x, d = 0) => x.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
   const clamp01 = x => Math.max(0, Math.min(1, x));
   const count = a => a.reduce((n, x) => n + (x ? 1 : 0), 0);
-  // Nur Bequemlichkeit je Gerät (gewähltes Rechenmodell); ohne Speicher geht alles weiter
+  // Nur Bequemlichkeit je Gerät (Rechenmodell, Live-Ansicht); ohne Speicher geht alles weiter
   const store = {
     get: k => { try { return JSON.parse(localStorage.getItem('knotenpunkt-' + k)); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem('knotenpunkt-' + k, JSON.stringify(v)); } catch {} },
   };
   const NAME = { truss: 'Fachwerk', frame: 'Rahmen' };
   const other = m => m === 'truss' ? 'frame' : 'truss';
+  const LIVE = ['aus', 'verformung', 'auslastung'];
 
   // Farbskala ohne Gelb: blau, türkis, grün, orange, rot; über 100 % magenta
   const STOPS = [[0, [38, 60, 150]], [0.2, [44, 110, 214]], [0.4, [24, 164, 196]], [0.6, [52, 178, 116]],
@@ -30,15 +32,20 @@
   const OVER = '#ff2e88';
   const bandOf = u => u > 1 ? OVER : BANDS[Math.min(9, Math.floor(Math.max(0, u) * 10))];
 
-  // model: Rechenmodell, das gewertet wird; shown: Modell in der Ergebnisansicht; res: Ergebnis je Modell
+  // on: je Stab 0 (kein Stab) oder Profil 1 bis 3. model: Rechenmodell, das gewertet wird; shown: Modell in der
+  // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; live: was beim Zeichnen zu sehen ist
   const st = { li: 0, def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
-    model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' }, resultView: null,
-    hover: -1, drag: null, tool: 'rect', eso: {}, esoRun: null, animId: 0, busy: false };
+    model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' },
+    prof: 1, live: LIVE.includes(store.get('live')) ? store.get('live') : 'verformung', liveRef: {},
+    hover: null, drag: null, eso: {}, esoRun: null, animId: 0, busy: false };
   let G = null;
   const C = {};
-  // eingespart in Prozent der Stablänge (gleiches Profil, also der Masse); was nicht am Lager hängt, fällt ab
-  const removedPct = conn => 100 * (1 - FEM.length(st.L, conn) / st.L.total);
-  const kg = len => len * KG_MM;
+  const startOn = L => Uint8Array.from(L.frozen);   // Start: nur die gesperrten Stäbe, im dünnsten Profil
+  const kg = (on, set) => FEM.mass(st.L, on, set);
+  const profText = on => {
+    const n = PROFILES.map((_, p) => count(Array.from(on, x => x === p + 1)));
+    return n.some(Boolean) ? n.map((c, p) => c ? `${c} × ${PROFILES[p].b}` : '').filter(Boolean).join(', ') : 'keine';
+  };
 
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -52,20 +59,45 @@
   const sameLoads = d => d.loads.every(l => l.fx === d.loads[0].fx && l.fy === d.loads[0].fy);
   const loadText = d => d.loads.length === 1 ? `F = ${kNtxt(d.loads[0])}`
     : sameLoads(d) ? `${d.loads.length} × ${kNtxt(d.loads[0])}` : d.loads.map(kNtxt).join(', ');
-
-  // Ränder [oben, rechts, unten, links] und Abstand der Bemaßung [unten, links] in Rasterfeldern. Die Schrift hat eine
+  const labelBelow = d => d.loads.length > 1 && sameLoads(d);   // gemeinsame Beschriftung unter den Lastpfeilen
+  const fontPx = s => Math.max(12, s * 0.2);
+  // liegt der Punkt (Raster, y nach oben) in einem Feld des Bauteils oder auf seinem Rand?
+  function inDomain(x, y) {
+    const d = st.def, e = 1e-6;
+    for (const cx of [Math.floor(x - e), Math.floor(x + e)]) for (const cy of [Math.floor(y - e), Math.floor(y + e)])
+      if (cx >= 0 && cy >= 0 && cx < d.nx && cy < d.ny && !(d.cut || []).some(([a, b]) => a === cx && b === cy)) return true;
+    return false;
+  }
+  // Lastpfeil in Rasterfeldern: zeigt er ins Bauteil, drückt er von außen auf den Knoten, sonst hängt er am Knoten.
+  // Die Beschriftung steht am äußeren Ende, waagrechte Pfeile davor oder dahinter, senkrechte rechts daneben.
+  function loadGeom(ld, s) {
+    const F = Math.hypot(ld.fx, ld.fy), u = [ld.fx / F, ld.fy / F], [i, j] = ld.node;
+    const push = inDomain(i + 0.45 * u[0], j + 0.45 * u[1]);
+    const tip = push ? [i - u[0] * 0.12, j - u[1] * 0.12] : [i + u[0] * 0.92, j + u[1] * 0.92];
+    const tail = push ? [tip[0] - u[0] * 0.8, tip[1] - u[1] * 0.8] : [i + u[0] * 0.12, j + u[1] * 0.12];
+    const end = push ? tail : tip;
+    ctx.save(); ctx.font = `600 ${fontPx(s)}px ${MONO}`;
+    const w = ctx.measureText(`F = ${kNtxt(ld)}`).width / s, h = fontPx(s) / s;
+    ctx.restore();
+    const left = Math.abs(u[0]) > 0.7 && end[0] < i;
+    const lab = Math.abs(u[0]) > 0.7 ? [end[0] + (left ? -0.12 : 0.12), end[1]] : [end[0] + 0.12, end[1] + (end[1] < j ? 0.1 : -0.1)];
+    const box = left ? [lab[0] - w, lab[1] - h / 2, lab[0], lab[1] + h / 2] : [lab[0], lab[1] - h / 2, lab[0] + w, lab[1] + h / 2];
+    return { u, tip, tail, lab, align: left ? 'right' : 'left', box };
+  }
+  // Ränder [oben, rechts, unten, links] und Abstand der Bemaßung [unten, seitlich] in Rasterfeldern. Die Schrift hat eine
   // Mindestgröße: auf schmalen Bildschirmen ist sie größer als vorgesehen, dann wachsen Ränder und Bemaßungsabstand mit.
   function frame(s) {
-    const d = st.def, [t, r, b, l] = d.margin, ex = Math.max(12, s * 0.2) / s - 0.2;
-    const below = d.loads.length > 1 && sameLoads(d);   // gemeinsame Beschriftung unter den Lastpfeilen
-    let right = r;
-    if (!below) {
-      ctx.save(); ctx.font = `600 ${Math.max(12, s * 0.2)}px ${MONO}`;
-      for (const ld of d.loads) right = Math.max(right, ld.node[0] - d.nx + 0.3 + ctx.measureText(`F = ${kNtxt(ld)}`).width / s);
-      ctx.restore();
+    const d = st.def, ex = fontPx(s) / s - 0.2, m = d.margin.slice();
+    if (!labelBelow(d)) for (const ld of d.loads) {
+      const g = loadGeom(ld, s);
+      for (const [x, y] of [g.tip, g.tail, [g.box[0], g.box[1]], [g.box[2], g.box[3]]]) {
+        m[0] = Math.max(m[0], y - d.ny + 0.25); m[1] = Math.max(m[1], x - d.nx + 0.25);
+        m[2] = Math.max(m[2], -y + 0.25); m[3] = Math.max(m[3], -x + 0.25);
+      }
     }
-    const rows = below ? 2 : 1;
-    return { m: [t, right, b + rows * ex, l + ex], dim: [d.dim[0] + rows * ex, d.dim[1]] };
+    const rows = labelBelow(d) ? 2 : 1, side = d.dimSide === 'right' ? 1 : 3;
+    m[2] += rows * ex; m[side] += ex;
+    return { m, dim: [d.dim[0] + rows * ex, d.dim[1]] };
   }
   function layout() {
     const d = st.def, W = wrap.clientWidth, maxH = Math.max(260, Math.min(innerHeight * 0.62, 640));
@@ -80,11 +112,12 @@
     G = { s, W, H, ox: (W - s * (d.nx + ml + mr)) / 2 + s * ml, oy: s * (mt + d.ny), dim: F.dim };
   }
   const P = ([i, j]) => [G.ox + i * G.s, G.oy - j * G.s];   // Rasterpunkt in Pixel
-  const bw = () => Math.max(3, G.s * 0.07);                // Strichstärke eines Stabs
+  const bw = () => Math.max(2.5, G.s * 0.055);
+  const bwOf = p => bw() * [1, 1.5, 2.05][p - 1];          // Strichstärke je Profil
   // Knotenlage in Pixel mit überhöhter Verschiebung (scale: Überhöhung, u in mm)
   const nodeXY = (r, n, scale) => {
     const [x, y] = P(st.L.ij[n]);
-    return !scale || !r.disp ? [x, y] : [x + scale * r.disp[n * 3] / GRID * G.s, y - scale * r.disp[n * 3 + 1] / GRID * G.s];
+    return !scale || !r || !r.disp ? [x, y] : [x + scale * r.disp[n * 3] / GRID * G.s, y - scale * r.disp[n * 3 + 1] / GRID * G.s];
   };
   // Punkte eines verformten Stabs: Fachwerk gerade, Rahmen als Biegelinie (kubisch, aus Knotenverschiebung und -verdrehung)
   function barPts(r, k, scale) {
@@ -100,13 +133,22 @@
     }
     return out;
   }
+  const maxDisp = r => { let m = 0; for (let n = 0; n < st.L.nN; n++) m = Math.max(m, Math.hypot(r.disp[n * 3], r.disp[n * 3 + 1])); return m; };
   function niceScale(r) {
-    let m = 0;
-    for (let n = 0; n < st.L.nN; n++) m = Math.max(m, Math.hypot(r.disp[n * 3], r.disp[n * 3 + 1]));
+    const m = maxDisp(r);
     if (!m) return 0;
     const raw = 0.35 * GRID / m, p = 10 ** Math.floor(Math.log10(raw));
     if (raw < 1) return raw;
     return [5, 3, 2, 1.5, 1].map(f => f * p).find(x => x <= raw);
+  }
+  // Live-Verformung: fester Maßstab je Bauteil und Modell (das volle Raster im mittleren Profil verschiebt sich um
+  // 0,04 Rasterfelder), damit ein weicher Entwurf sichtbar mehr nachgibt; höchstens 0,5 Rasterfelder
+  function liveScale(r) {
+    if (!r.disp) return 0;
+    const key = st.li + '-' + r.model;
+    if (!st.liveRef[key]) st.liveRef[key] = 0.04 * GRID / maxDisp(FEM.analyze(st.L, Uint8Array.from(st.L.domain, () => 2), r.model));
+    const m = maxDisp(r);
+    return m * st.liveRef[key] > 0.5 * GRID ? 0.5 * GRID / m : st.liveRef[key];
   }
   const mid = k => { const b = st.L.bars[k]; return [(b.p[0] + b.q[0]) / 2, (b.p[1] + b.q[1]) / 2]; };
 
@@ -116,15 +158,15 @@
     ctx.clearRect(0, 0, G.W, G.H);
     drawGround();
     drawSupports();
-    if (st.view.mode === 'blind') {
-      drawBars(st.on, st.conn, st.model);
-      drawHover();
-    } else drawResult(st.view);
-    if (st.drag) drawDrag();
+    if (st.view.mode === 'blind') drawBars(st.on, st.conn, st.model);
+    else drawResult(st.view);
+    drawHover();
+    if (st.drag && st.drag.moved) drawDrag();
     drawLoads(st.view);
     drawDims();
   }
   const line = pts => { ctx.moveTo(...pts[0]); for (let i = 1; i < pts.length; i++) ctx.lineTo(...pts[i]); };
+  const strokeBar = (pts, w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); line(pts); ctx.stroke(); };
 
   // Raster: jede Stelle, an der ein Stab sitzen kann, als dünne Linie
   function drawGround() {
@@ -137,36 +179,30 @@
     ctx.restore();
   }
 
-  // Stäbe im Entwurf: Stahl mit Umriss, gesperrte dunkler; ohne Verbindung zum Lager rot gestrichelt.
+  // Stäbe im Entwurf: Stahl mit Umriss, Strichstärke nach Profil, gesperrte dunkler; ohne Verbindung zum Lager rot gestrichelt.
   // Knoten: Fachwerk als Gelenk (Kreis), Rahmen als steifer Knoten (Quadrat)
   function drawBars(on, conn, model, only = () => true) {
-    const L = st.L, w = bw(), set = [], loose = [];
+    const L = st.L, set = [], loose = [];
     for (let k = 0; k < L.nB; k++) if (on[k] && only(k)) (conn[k] ? set : loose).push(k);
     ctx.save(); ctx.lineCap = 'round';
-    ctx.strokeStyle = C.ink; ctx.lineWidth = w + 2.5; ctx.beginPath();
-    for (const k of set) line([P(L.bars[k].p), P(L.bars[k].q)]);
-    ctx.stroke();
-    for (const [frz, col] of [[0, C.steel], [1, C.steel2]]) {
-      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
-      for (const k of set) if (L.frozen[k] === frz) line([P(L.bars[k].p), P(L.bars[k].q)]);
-      ctx.stroke();
-    }
+    for (const k of set) strokeBar([P(L.bars[k].p), P(L.bars[k].q)], bwOf(on[k]) + 2.5, C.ink);
+    for (const k of set) strokeBar([P(L.bars[k].p), P(L.bars[k].q)], bwOf(on[k]), L.frozen[k] ? C.steel2 : C.steel);
     ctx.restore();
-    drawLoose(loose);
-    const nodes = new Set();
-    for (const k of set) { nodes.add(L.bars[k].a); nodes.add(L.bars[k].b); }
-    drawNodes(nodes, model, n => P(L.ij[n]));
+    drawLoose(loose, on);
+    drawNodes(set, on, model, n => P(L.ij[n]));
   }
-  function drawLoose(list) {
+  function drawLoose(list, on) {
     if (!list.length) return;
-    ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = C.loose; ctx.lineWidth = Math.max(2, bw() * 0.6); ctx.beginPath();
-    for (const k of list) line([P(st.L.bars[k].p), P(st.L.bars[k].q)]);
-    ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.setLineDash([5, 4]);
+    for (const k of list) strokeBar([P(st.L.bars[k].p), P(st.L.bars[k].q)], Math.max(2, bwOf(on[k]) * 0.6), C.loose);
+    ctx.restore();
   }
-  function drawNodes(nodes, model, pos) {
-    const w = bw();
+  // Knotensymbol so groß wie der dickste Stab am Knoten
+  function drawNodes(bars, on, model, pos) {
+    const size = new Map();
+    for (const k of bars) for (const n of [st.L.bars[k].a, st.L.bars[k].b]) size.set(n, Math.max(size.get(n) || 0, bwOf(on[k])));
     ctx.save(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.ink;
-    for (const n of nodes) {
+    for (const [n, w] of size) {
       const [x, y] = pos(n);
       ctx.beginPath();
       if (model === 'truss') { ctx.arc(x, y, w * 0.72, 0, 7); ctx.fillStyle = C.sheet; ctx.fill(); ctx.stroke(); }
@@ -174,45 +210,46 @@
     }
     ctx.restore();
   }
-  // Maus über einem Stab: was ein Klick tut (blau: entfernen, gestrichelt: einsetzen)
+  // Maus über einem Stab: was ein Klick tut (gestrichelt: einsetzen, voll: Profil wechseln, rot: entfernen);
+  // über einem Knoten: hier beginnt ein Zug
   function drawHover() {
-    const k = st.hover;
-    if (k < 0 || st.drag || !editable() || st.L.frozen[k]) return;
-    const b = st.L.bars[k];
-    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = C.accent; ctx.lineWidth = bw();
-    if (!st.on[k]) ctx.setLineDash([6, 5]);
-    ctx.beginPath(); line([P(b.p), P(b.q)]); ctx.stroke(); ctx.restore();
+    const h = st.hover;
+    if (!h || st.drag || !editable()) return;
+    ctx.save(); ctx.lineCap = 'round';
+    if (h.node != null) {
+      const [x, y] = P(st.L.ij[h.node]);
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, Math.max(7, G.s * 0.12), 0, 7); ctx.stroke();
+    } else {
+      const b = st.L.bars[h.k], pts = [P(b.p), P(b.q)];
+      if (h.erase) { ctx.setLineDash([5, 4]); strokeBar(pts, bwOf(st.on[h.k]) + 2, C.bad); }
+      else { if (!st.on[h.k]) ctx.setLineDash([6, 5]); ctx.globalAlpha = 0.85; strokeBar(pts, bwOf(st.prof), C.accent); }
+    }
+    ctx.restore();
   }
-  // Vorschau beim Ziehen: Stäbe, die sich ändern, und Rechteck oder Linie
+  // Vorschau beim Ziehen: Stäbe, die dazukommen (blau) oder wegfallen (rot gestrichelt), und die Linie selbst
   function drawDrag() {
-    const d = st.drag;
-    if (d.kind === 'brush') return;
-    const list = d.kind === 'rect' ? rectBars(d) : lineBars(d).bars;
-    ctx.save(); ctx.lineCap = 'round'; ctx.lineWidth = bw();
-    for (const k of list) {
-      const b = st.L.bars[k];
-      ctx.strokeStyle = d.paint ? C.accent : C.sheet; ctx.globalAlpha = d.paint ? 0.75 : 0.85;
-      ctx.beginPath(); line([P(b.p), P(b.q)]); ctx.stroke();
+    const { a, b, bars, erase } = lineBars(st.drag);
+    ctx.save(); ctx.lineCap = 'round';
+    for (const k of bars) {
+      const q = st.L.bars[k], pts = [P(q.p), P(q.q)];
+      if (erase) { strokeBar(pts, bwOf(st.on[k]) + 2.5, C.sheet); ctx.setLineDash([5, 4]); strokeBar(pts, 2, C.bad); ctx.setLineDash([]); }
+      else { ctx.globalAlpha = 0.85; strokeBar(pts, bwOf(st.prof), C.accent); ctx.globalAlpha = 1; }
     }
-    ctx.globalAlpha = 1; ctx.setLineDash([6, 4]); ctx.strokeStyle = C.accent; ctx.lineWidth = 2;
-    if (d.kind === 'rect' && !isClick(d)) {
-      const [x0, y0] = P(d.p0), [x1, y1] = P(d.p1);
-      ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
-    }
-    if (d.kind === 'line') { const { a, b } = lineBars(d); ctx.beginPath(); line([P(a), P(b)]); ctx.stroke(); }
+    ctx.setLineDash([6, 4]); strokeBar([P(a), P(b)], 1.5, C.accent);
     ctx.restore();
   }
 
-  // Ergebnisansicht: verformte Stäbe in Farbe der Auslastung, Aufdeck-Wisch, Versagen
+  // Ergebnisansicht: verformte Stäbe in Farbe der Auslastung, Aufdeck-Wisch, Versagen.
+  // live: beim Zeichnen; colors: Farben der Auslastung (sonst Stahl)
   function drawResult(v) {
-    const L = st.L, r = v.res, w = bw();
+    const L = st.L, r = v.res, on = v.on;
     const falling = k => v.fall && v.fall.p > 0 && v.fall.set[k];
-    if (!r.disp) {
-      drawBars(v.on, r.conn, r.model, k => !falling(k));
-    } else {
-      const mech = r.reason === 'mechanismus', sweepX = v.sweep == null ? Infinity : v.sweep * L.def.nx;
+    if (!r.disp) drawBars(on, r.conn, r.model, k => !falling(k));
+    else {
+      const mech = r.reason === 'mechanismus', colors = !mech && (!v.live || v.colors);
+      const sweepX = v.sweep == null ? Infinity : v.sweep * L.def.nx;
       const scale = v.scale * (v.defo == null ? 1 : v.defo), shown = k => r.fe[k] && !falling(k) && mid(k)[0] <= sweepX;
-      drawBars(v.on, r.conn, r.model, k => !falling(k) && !shown(k));   // noch nicht aufgedeckt oder trägt nichts
+      drawBars(on, r.conn, r.model, k => !falling(k) && !shown(k));   // noch nicht aufgedeckt oder trägt nichts
       if (scale) {   // unverformte Lage
         ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = C.ink2; ctx.lineWidth = 1; ctx.beginPath();
         for (let k = 0; k < L.nB; k++) if (r.fe[k]) line([P(L.bars[k].p), P(L.bars[k].q)]);
@@ -221,28 +258,23 @@
       const pts = [];
       for (let k = 0; k < L.nB; k++) if (shown(k)) pts[k] = barPts(r, k, scale);
       ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(8,16,28,0.55)'; ctx.lineWidth = w + 2.5; ctx.beginPath();
-      pts.forEach(p => p && line(p));
-      ctx.stroke();
+      pts.forEach((p, k) => p && strokeBar(p, bwOf(on[k]) + 2.5, 'rgba(8,16,28,0.55)'));
       const pulse = 0.25 + 0.2 * Math.sin((v.t || 0) / 70);
       pts.forEach((p, k) => {
         if (!p) return;
-        ctx.strokeStyle = mech ? C.steel : bandOf(r.util[k]); ctx.lineWidth = w;
-        ctx.beginPath(); line(p); ctx.stroke();
-        if (r.util[k] > 1) {
-          ctx.strokeStyle = `rgba(255,255,255,${pulse})`; ctx.beginPath(); line(p); ctx.stroke();
-          if (r.fail[k] === 2) drawBuckle(p, w); else drawCrack(p, w);
+        strokeBar(p, bwOf(on[k]), colors ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel);
+        if (colors && r.util[k] > 1) {
+          strokeBar(p, bwOf(on[k]), `rgba(255,255,255,${pulse})`);
+          if (r.fail[k] === 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
         }
       });
       ctx.restore();
-      const nodes = new Set();
-      pts.forEach((p, k) => { if (p) { nodes.add(L.bars[k].a); nodes.add(L.bars[k].b); } });
-      drawNodes(nodes, r.model, n => nodeXY(r, n, scale));
-      if (!mech && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) drawMax(r, pts[r.maxBar]);
+      drawNodes(pts.map((p, k) => p ? k : -1).filter(k => k >= 0), on, r.model, n => nodeXY(r, n, scale));
+      if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) drawMax(r, pts[r.maxBar]);
     }
-    if (v.loose) drawFalling(v.loose.set, v.loose.p, () => C.steel);
-    else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => v.on[k] && !r.conn[k]));
-    if (v.fall) drawFalling(v.fall.set, v.fall.p, k => r.disp && r.fe[k] && r.reason !== 'mechanismus' ? bandOf(r.util[k]) : C.steel);
+    if (v.loose) drawFalling(v.loose.set, v.loose.p, on, () => C.steel);
+    else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
+    if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && r.reason !== 'mechanismus' ? bandOf(r.util[k]) : C.steel);
   }
   // Knicken: Stab seitlich ausgebaucht; Fließen: Riss quer über die Stabmitte
   function drawBuckle(p, w) {
@@ -262,26 +294,25 @@
     ctx.lineTo(m[0] - tx * w * 0.3, m[1] - ty * w * 0.3); ctx.lineTo(m[0] + nx * h, m[1] + ny * h);
     ctx.stroke(); ctx.restore();
   }
-  function drawFalling(set, p, color) {
+  function drawFalling(set, p, on, color) {
     if (p <= 0 || !set.some(Boolean)) return;
-    const s = G.s, w = bw();
+    const s = G.s;
     ctx.save(); ctx.globalAlpha = 1 - clamp01((p - 0.65) / 0.35); ctx.lineCap = 'round';
     for (let k = 0; k < st.L.nB; k++) if (set[k]) {
-      const b = st.L.bars[k], [x0, y0] = P(b.p), [x1, y1] = P(b.q), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const b = st.L.bars[k], [x0, y0] = P(b.p), [x1, y1] = P(b.q), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, w = bwOf(on[k] || 1);
       const h = ((k * 2654435761) >>> 0) / 4294967296;
       ctx.save();
       ctx.translate(cx + (h - 0.5) * s * 1.5 * p, cy + p * p * (G.H * 0.9 + s * 2 * h));
       ctx.rotate((h - 0.5) * 2.4 * p);
-      ctx.strokeStyle = C.ink; ctx.lineWidth = w + 2.5;
-      ctx.beginPath(); ctx.moveTo(x0 - cx, y0 - cy); ctx.lineTo(x1 - cx, y1 - cy); ctx.stroke();
-      ctx.strokeStyle = color(k); ctx.lineWidth = w; ctx.stroke();
+      const pts = [[x0 - cx, y0 - cy], [x1 - cx, y1 - cy]];
+      strokeBar(pts, w + 2.5, C.ink); strokeBar(pts, w, color(k));
       ctx.restore();
     }
     ctx.restore();
   }
   function drawMax(r, pts) {
     if (r.maxBar < 0 || !pts) return;
-    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${fmt(100 * r.maxUtil)} %${r.fail[r.maxBar] === 2 || (r.N[r.maxBar] < 0 && knickt(r, r.maxBar)) ? ' Knicken' : ''}`;
+    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
     ctx.save(); ctx.font = `600 ${Math.max(11, G.s * 0.2)}px ${MONO}`;
     const w = ctx.measureText(txt).width + 12, h = Math.max(18, G.s * 0.3);
     const lx = Math.min(Math.max(4, cx + G.s * 0.3), G.W - w - 4), ly = Math.min(Math.max(4, cy - G.s * 0.45 - h), G.H - h - 4);
@@ -293,10 +324,7 @@
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
-  const knickt = (r, k) => {
-    const N = r.N[k], sig = Math.abs(N) / FEM.AREA + Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])) / FEM.WEL;
-    return N < 0 && r.util[k] > sig / FEM.RE + 1e-12;
-  };
+  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1];
 
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
@@ -336,32 +364,34 @@
     ctx.restore();
   }
 
-  // Lasten hängen am Knoten (Pfeil vom Knoten weg in Lastrichtung); gleiche Lasten bekommen eine gemeinsame Beschriftung
+  // Lastpfeile (siehe loadGeom); sie wandern mit der Verformung. Gleiche Lasten bekommen eine gemeinsame Beschriftung.
   function drawLoads(v) {
-    const s = G.s, d = st.def, r = v.res && v.res.disp && v.res.reason !== 'mechanismus' ? v.res : null;
-    const scale = r ? (v.scale || 0) * (v.defo == null ? 1 : v.defo) : 0, len = 0.8, hl = s * 0.2, hw = s * 0.09;
+    const s = G.s, d = st.def, r = v.res && v.res.disp && (v.live || v.res.reason !== 'mechanismus') ? v.res : null;
+    const scale = r ? (v.scale || 0) * (v.defo == null ? 1 : v.defo) : 0, hl = s * 0.2, hw = s * 0.09;
     ctx.save(); ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent; ctx.lineWidth = Math.max(2, s * 0.04);
-    ctx.font = `600 ${Math.max(12, s * 0.2)}px ${MONO}`; ctx.textBaseline = 'middle';
+    ctx.font = `600 ${fontPx(s)}px ${MONO}`; ctx.textBaseline = 'middle';
     const tips = d.loads.map(ld => {
-      const F = Math.hypot(ld.fx, ld.fy), ux = ld.fx / F, uy = -ld.fy / F, [x0, y0] = nodeXY(r || {}, st.L.id(...ld.node), scale);
-      const bx = x0 + ux * s * 0.12, by = y0 + uy * s * 0.12, tx = bx + ux * s * len, ty = by + uy * s * len;
+      const g = loadGeom(ld, s), [nx, ny] = P(ld.node), [mx, my] = nodeXY(r, st.L.id(...ld.node), scale), sh = ([x, y]) => [x + mx - nx, y + my - ny];
+      const [bx, by] = sh(P(g.tail)), [tx, ty] = sh(P(g.tip)), ux = g.u[0], uy = -g.u[1];
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx - ux * hl, ty - uy * hl); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(tx, ty);
       ctx.lineTo(tx - ux * hl - uy * hw, ty - uy * hl + ux * hw); ctx.lineTo(tx - ux * hl + uy * hw, ty - uy * hl - ux * hw);
       ctx.closePath(); ctx.fill();
+      if (!labelBelow(d)) { const [lx, ly] = sh(P(g.lab)); ctx.textAlign = g.align; ctx.fillText(`F = ${kNtxt(ld)}`, lx, ly); }
       return [tx, ty];
     });
-    if (d.loads.length > 1 && sameLoads(d)) {
+    if (labelBelow(d)) {
       const t = tips[Math.floor(tips.length / 2)];
-      ctx.textAlign = 'center'; ctx.fillText(`je F = ${kNtxt(d.loads[0])}`, t[0], t[1] + Math.max(12, s * 0.2) * 0.5 + s * 0.12);
-    } else tips.forEach(([tx, ty], i) => { ctx.textAlign = 'left'; ctx.fillText(`F = ${kNtxt(d.loads[i])}`, tx + s * 0.12, ty - s * 0.1); });
+      ctx.textAlign = 'center'; ctx.fillText(`je F = ${kNtxt(d.loads[0])}`, t[0], t[1] + fontPx(s) * 0.5 + s * 0.12);
+    }
     ctx.restore();
   }
 
-  // Gesamtmaße unten und links, in mm
+  // Gesamtmaße unten und links (oder rechts), in mm
   function drawDims() {
-    const d = st.def, s = G.s, a = Math.max(5, s * 0.1), [xd0, yd0] = [G.ox - G.dim[1] * s, G.oy + G.dim[0] * s];
-    const x0 = G.ox, x1 = G.ox + d.nx * s, y0 = G.oy, yt = G.oy - d.ny * s;
+    const d = st.def, s = G.s, a = Math.max(5, s * 0.1), right = d.dimSide === 'right';
+    const x0 = G.ox, x1 = G.ox + d.nx * s, y0 = G.oy, yt = G.oy - d.ny * s, yd0 = G.oy + G.dim[0] * s;
+    const xe = right ? x1 : x0, sx = right ? 1 : -1, xd0 = xe + sx * G.dim[1] * s;
     const head = (x, y, ux, uy) => {
       ctx.beginPath(); ctx.moveTo(x, y);
       ctx.lineTo(x - ux * a - uy * a * 0.3, y - uy * a + ux * a * 0.3); ctx.lineTo(x - ux * a + uy * a * 0.3, y - uy * a - ux * a * 0.3);
@@ -370,13 +400,14 @@
     ctx.save(); ctx.strokeStyle = C.ink2; ctx.fillStyle = C.ink2; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x0, y0 + s * 0.1); ctx.lineTo(x0, yd0 + a); ctx.moveTo(x1, y0 + s * 0.1); ctx.lineTo(x1, yd0 + a);
-    ctx.moveTo(x0 - s * 0.1, y0); ctx.lineTo(xd0 - a, y0); ctx.moveTo(x0 - s * 0.1, yt); ctx.lineTo(xd0 - a, yt);
+    ctx.moveTo(xe + sx * s * 0.1, y0); ctx.lineTo(xd0 + sx * a, y0); ctx.moveTo(xe + sx * s * 0.1, yt); ctx.lineTo(xd0 + sx * a, yt);
     ctx.moveTo(x0, yd0); ctx.lineTo(x1, yd0); ctx.moveTo(xd0, y0); ctx.lineTo(xd0, yt);
     ctx.stroke();
     head(x0, yd0, -1, 0); head(x1, yd0, 1, 0); head(xd0, y0, 0, 1); head(xd0, yt, 0, -1);
     ctx.font = `500 ${Math.max(11, s * 0.19)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText(String(d.nx * GRID), (x0 + x1) / 2, yd0 - 3);
-    ctx.translate(xd0 - 3, (y0 + yt) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(String(d.ny * GRID), 0, 0);
+    ctx.translate(xd0 + sx * 3, (y0 + yt) / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = right ? 'top' : 'bottom';
+    ctx.fillText(String(d.ny * GRID), 0, 0);
     ctx.restore();
   }
 
@@ -395,25 +426,26 @@
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${fmt(100 * r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${fmt(100 * r.maxUtil)} %, hält.` : failWhy(r);
-  function showFem(r, scale) {
+  const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
+  function showFem(r, scale, live) {
     let t = '';
-    if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Steifigkeitsmatrix nur mit den Hilfsfedern regulär, das Stabwerk ist beweglich.`;
+    if (live) t = !r.disp ? '' : r.reason === 'mechanismus' ? `Verformung live als ${NAME[r.model]}: Das Stabwerk gibt nach, es ist beweglich.`
+      : `Verformung live als ${NAME[r.model]}, ${overText(scale)}.`;
+    else if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Steifigkeitsmatrix nur mit den Hilfsfedern regulär, das Stabwerk ist beweglich.`;
     else if (r.disp) t = `${NAME[r.model]}: ${fmt(r.bars)} Stäbe, ${fmt(r.dofs)} Freiheitsgrade, gelöst in ${fmt(r.ms, 1)} ms` +
-      (!scale ? '.' : scale >= 1 ? `. Verformung ${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht.` : '. Verformung verkleinert dargestellt.');
+      (scale ? `. Verformung ${overText(scale)}.` : '.');
     $('femline').textContent = t;
-    $('legend').hidden = !r.disp || r.reason === 'mechanismus';
   }
+  const legend = on => { $('legend').hidden = !on; };
 
   function panel() {
-    const L = st.L, d = st.def, e = esoNow();
-    const conn = st.phase === 'eso' && e ? e.res.conn : st.conn;
+    const L = st.L, d = st.def, e = esoNow(), eso = st.phase === 'eso' && e;
+    const on = eso ? e.on : st.on, conn = eso ? e.res.conn : st.conn;
     $('tb-name').textContent = d.name;
-    $('tb-profile').textContent = FEM.PROFILE;
     $('tb-load').textContent = loadText(d);
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
-    $('tb-bars').textContent = `${count(conn)} von ${L.nB}`;
-    $('tb-mass').textContent = `${fmt(kg(FEM.length(L, conn)))} von ${fmt(kg(L.total))} kg`;
-    $('tb-removed').textContent = `${fmt(removedPct(conn), 1)} %`;
+    $('tb-bars').textContent = `${count(conn)}: ${profText(Uint8Array.from(on, (x, k) => conn[k] ? x : 0))}`;
+    $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
     $('tb-probe').textContent = st.probes ? `${st.probes} übrig` : 'verbraucht';
     $('tb-sheet').textContent = `${st.li + 1} von ${LEVELS.length}`;
   }
@@ -424,14 +456,14 @@
     $('act-result').hidden = design;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
-      $('b-probe').disabled = !st.probes || $('live').checked;
+      $('b-probe').disabled = !st.probes || st.live === 'auslastung';
       $('b-undo').disabled = !st.undo.length;
       $('b-eso').disabled = !esoNow();
     }
     $('b-probe').textContent = `Probe-Rechnung (${st.probes})`;
     $('b-eso').textContent = st.phase === 'eso' ? 'Mein Ergebnis' : 'Lösung des Algorithmus';
-    $('live').disabled = !design || st.busy;
-    for (const id of ['t-rect', 't-brush', 't-line']) $(id).disabled = !design || st.busy;
+    for (const p of [1, 2, 3]) { const b = $('pr-' + p); b.setAttribute('aria-pressed', String(st.prof === p)); b.disabled = !design || st.busy; }
+    for (const m of LIVE) { const b = $('lv-' + m); b.setAttribute('aria-pressed', String(st.live === m)); b.disabled = !design || st.busy; }
     // im Entwurf: welches Modell gewertet wird; nach dem Abgeben: welches Modell gezeigt wird
     const m = design ? st.model : st.shown;
     $('model-label').textContent = design ? 'Rechnen als' : 'Ansicht';
@@ -446,16 +478,20 @@
     st.conn = FEM.attached(st.L, st.on);
     const loose = st.on.some((x, k) => x && !st.conn[k]);
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
-    if ($('live').checked) {
-      const r = FEM.analyze(st.L, st.on, st.model);
-      st.view = { mode: 'result', res: r, on: st.on, scale: 0 };
-      showFem(r, 0);
-      $('verdict').innerHTML = `<p>Live als ${NAME[st.model]}: ${statusText(r)}</p>${hint}`;
-    } else if (st.phase === 'design') {
-      st.view = { mode: 'blind' };
-      $('legend').hidden = true;
-      $('femline').textContent = '';
-      $('verdict').innerHTML = `<p>${st.def.note}</p>${hint}`;
+    if (st.phase === 'design') {
+      if (st.live !== 'aus') {
+        const r = FEM.analyze(st.L, st.on, st.model), scale = liveScale(r), colors = st.live === 'auslastung';
+        st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
+        showFem(r, scale, !colors);
+        legend(colors && r.disp && r.reason !== 'mechanismus');
+        const what = colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
+        $('verdict').innerHTML = `<p>${what}</p>${hint}`;
+      } else {
+        st.view = { mode: 'blind' };
+        legend(false);
+        $('femline').textContent = '';
+        $('verdict').innerHTML = `<p>${st.def.note}</p>${hint}`;
+      }
     }
     panel(); controls(); render();
   }
@@ -463,18 +499,20 @@
   function loadLevel(i) {
     st.animId++;
     st.li = i; st.def = LEVELS[i]; st.L = FEM.level(st.def);
-    st.on = st.L.domain.slice(); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false;
-    st.drag = null; st.hover = -1;
+    st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false;
+    st.drag = null; st.hover = null;
     $('stamp').hidden = true;
     document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
     layout(); refresh(); startEso();
   }
 
   const pushUndo = () => { st.undo.push(st.on.slice()); if (st.undo.length > 200) st.undo.shift(); };
-  function setBars(list, val) {
-    const ch = list.filter(k => !st.L.frozen[k] && st.on[k] !== val);
+  // Zeichnen setzt das gewählte Profil, Entfernen nimmt Stäbe weg (gesperrte bleiben)
+  function apply(list, erase) {
+    const ch = list.filter(k => erase ? st.on[k] && !st.L.frozen[k] : st.on[k] !== st.prof);
     if (!ch.length) return false;
-    for (const k of ch) st.on[k] = val;
+    pushUndo();
+    for (const k of ch) st.on[k] = erase ? 0 : st.prof;
     st.phase = 'design';
     return true;
   }
@@ -486,10 +524,11 @@
   function probe() {
     if (!st.probes || !editable()) return;
     st.probes--;
-    const r = FEM.analyze(st.L, st.on, st.model);
+    const r = FEM.analyze(st.L, st.on, st.model), scale = liveScale(r);
     st.phase = 'probe';
-    st.view = { mode: 'result', res: r, on: st.on, scale: 0 };
+    st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors: true };
     showFem(r, 0);
+    legend(r.disp && r.reason !== 'mechanismus');
     $('verdict').innerHTML = `<p>Probe-Rechnung als ${NAME[st.model]}: ${statusText(r)} Die Farben verschwinden, sobald Sie weiterarbeiten.</p>`;
     panel(); controls(); render();
   }
@@ -516,6 +555,7 @@
   function submit() {
     if (!editable()) return;
     $('verdict').innerHTML = '<p>Rechnet …</p>';
+    st.hover = null;
     st.res = { truss: FEM.analyze(st.L, st.on, 'truss'), frame: FEM.analyze(st.L, st.on, 'frame') };
     st.shown = st.model; st.phase = 'result';
     reveal(st.res[st.model], st.on, true, verdict);
@@ -529,15 +569,16 @@
     // Was beim Versagen abfällt: versagende Stäbe und alles, was dann nicht mehr am Lager hängt; beim Mechanismus alles Tragende
     let fall = null;
     if (stress && !r.ok) {
-      const keep = FEM.attached(L, Uint8Array.from(on, (x, k) => x && r.conn[k] && !(r.util[k] > 1) ? 1 : 0));
+      const keep = FEM.attached(L, Uint8Array.from(on, (x, k) => x && r.conn[k] && !(r.util[k] > 1) ? x : 0));
       fall = Uint8Array.from(on, (x, k) => r.conn[k] && (!keep[k] || r.util[k] > 1) ? 1 : 0);
     } else if (mech) fall = Uint8Array.from(r.fe);
     let scale = 0;
     if (stress) scale = niceScale(r);
-    if (mech) { let m = 0; for (let n = 0; n < L.nN; n++) m = Math.max(m, Math.hypot(r.disp[n * 3], r.disp[n * 3 + 1])); scale = m ? 0.45 * GRID / m : 0; }
+    if (mech) { const m = maxDisp(r); scale = m ? 0.45 * GRID / m : 0; }
     const v = st.view = { mode: 'result', res: r, on, scale, sweep: stress && full ? 0 : 1, defo: 0, t: 0,
       loose: { set: loose, p: 0 }, fall: fall && { set: fall, p: 0 } };
     showFem(r, stress ? scale : 0);
+    legend(stress);
     $('stamp').hidden = true;
     panel(); controls();
     const T1 = stress && full ? 700 : 0, T2 = T1 + (stress || mech ? 1000 : 300), TB = T2 + 300, TE = fall ? TB + 1400 : T2 + 300;
@@ -562,18 +603,18 @@
 
   // Ergebnis: Wertung im gewählten Modell, dazu das andere Modell und der Algorithmus
   function verdict() {
-    const m = st.model, r = st.res[m], o = st.res[other(m)], rem = removedPct(r.conn), e = st.eso[esoKey()];
+    const m = st.model, r = st.res[m], o = st.res[other(m)], e = st.eso[esoKey()], mine = kg(st.on, r.conn);
     let h = r.ok
-      ? `<p><span class="t-ok">Hält als ${NAME[m]}.</span> Max. Auslastung ${fmt(100 * r.maxUtil)} %. Sie haben ${fmt(rem, 1)} % der Masse eingespart, ${fmt(kg(FEM.length(st.L, r.conn)))} statt ${fmt(kg(st.L.total))} kg.</p>`
-      : `<p><span class="t-bad">Versagt als ${NAME[m]}.</span> ${failWhy(r)} Gewertet: 0 %.</p>`;
+      ? `<p><span class="t-ok">Hält als ${NAME[m]}.</span> Max. Auslastung ${fmt(100 * r.maxUtil)} %, Masse ${fmt(mine)} kg.</p>`
+      : `<p><span class="t-bad">Versagt als ${NAME[m]}.</span> ${failWhy(r)} Es zählt nur, was hält.</p>`;
     h += `<p>Als ${NAME[other(m)]} gerechnet: ${o.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${fmt(100 * o.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(o)}`}` +
       ` Oben bei „Ansicht“ schalten Sie zwischen beiden um.</p>`;
     if (!e) h += '<p>Der Algorithmus rechnet noch …</p>';
     else if (e.res.ok) {
-      const er = removedPct(e.res.conn);
+      const em = kg(e.on, e.res.conn);
       let cmp = '';
-      if (r.ok) cmp = rem > er + 1e-9 ? 'Algorithmus geschlagen!' : rem > er - 1e-9 ? 'Gleichstand mit dem Algorithmus.' : er - rem <= 5 ? 'Knapp dran.' : 'Da geht noch was.';
-      h += `<p>Algorithmus (ESO, als ${NAME[m]}): ${fmt(er, 1)} % eingespart, max. Auslastung ${fmt(100 * e.res.maxUtil)} %. ${cmp}</p>`;
+      if (r.ok) cmp = mine < em - 0.05 ? 'Algorithmus geschlagen!' : mine <= em + 0.05 ? 'Gleichstand mit dem Algorithmus.' : mine <= em * 1.1 ? 'Knapp dran.' : 'Da geht noch was.';
+      h += `<p>Algorithmus (als ${NAME[m]}): ${fmt(em)} kg, max. Auslastung ${fmt(100 * e.res.maxUtil)} %. ${cmp}</p>`;
     }
     $('verdict').innerHTML = h;
   }
@@ -584,7 +625,7 @@
     if (st.phase === 'design' || st.phase === 'probe') {
       if (m === st.model) return;
       st.model = m; store.set('model', m);
-      if (st.phase === 'probe') st.phase = 'design';
+      st.phase = 'design';
       refresh(); startEso();
       return;
     }
@@ -592,6 +633,17 @@
     st.shown = m;
     if (st.phase === 'eso') return showEso();
     reveal(st.res[m], st.on, false, () => verdict());
+  }
+  function setLive(m) {
+    if (!editable() || m === st.live) return;
+    st.live = m; store.set('live', m);
+    st.phase = 'design';
+    refresh();
+  }
+  function setProf(p) {
+    if (!editable()) return;
+    st.prof = p;
+    controls(); render();
   }
 
   // ---------- Algorithmus ----------
@@ -602,9 +654,9 @@
     e.inModel = e.inModel || {};
     const r = e.inModel[m] = e.inModel[m] || FEM.analyze(st.L, e.on, m);
     reveal(r, e.on, false, () => {
-      const er = removedPct(e.res.conn);
-      $('verdict').innerHTML = `<p>Lösung der Evolutionären Strukturoptimierung, optimiert als ${NAME[st.model]}: ${fmt(er, 1)} % eingespart, ` +
-        `${e.order.length} Stäbe entfernt.</p><p>Als ${NAME[m]} gerechnet: ${r.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${fmt(100 * r.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(r)}`}</p>`;
+      $('verdict').innerHTML = `<p>Lösung des Algorithmus, optimiert als ${NAME[st.model]}: ${fmt(kg(e.on, e.res.conn))} kg, ${count(e.on)} Stäbe ` +
+        `(${profText(e.on)}). Er hat immer den am wenigsten ausgelasteten Stab entfernt und danach jedem Stab das kleinste Profil gegeben, das hält.</p>` +
+        `<p>Als ${NAME[m]} gerechnet: ${r.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${fmt(100 * r.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(r)}`}</p>`;
     });
   }
   function toggleEso() {
@@ -617,11 +669,11 @@
       showEso();
     }
   }
-  // ESO läuft im Hintergrund in kleinen Zeitscheiben, damit das Zeichnen flüssig bleibt
+  // Der Gegner läuft im Hintergrund in kleinen Zeitscheiben, damit das Zeichnen flüssig bleibt
   function startEso() {
     const key = esoKey();
     if (st.eso[key] || (st.esoRun && st.esoRun.key === key)) return;
-    const gen = FEM.eso(st.L, st.model), run = st.esoRun = { key };
+    const gen = FEM.optimize(st.L, st.model), run = st.esoRun = { key };
     const pump = () => {
       if (st.esoRun !== run) return;
       const t0 = performance.now();
@@ -636,9 +688,9 @@
   }
 
   // ---------- Eingabe ----------
-  // Rechteck: aufziehen, beim Loslassen wechseln alle Stäbe, deren Mitte darin liegt; Antippen wechselt einen Stab.
-  // Pinsel: jeder überstrichene Stab. Linie: von Knoten zu Knoten, auf 0°, 45°, 90° und 135° gerastet.
-  // Wer auf einem fehlenden Stab beginnt, setzt Stäbe ein, sonst wird entfernt.
+  // Ziehen von Knoten zu Knoten zeichnet eine Linie (waagrecht, senkrecht oder unter 45°). Liegt am Anfang der Linie schon
+  // ein Stab im gewählten Profil, nimmt der Zug die Stäbe entlang der Linie weg, sonst bekommen sie das gewählte Profil.
+  // Antippen wirkt genauso auf einen einzelnen Stab.
   const gridPt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left - G.ox) / G.s, (G.oy - e.clientY + b.top) / G.s]; };
   function barNear([x, y], tol) {
     let best = -1, bd = tol;
@@ -649,19 +701,15 @@
     });
     return best;
   }
-  const tol = e => e.pointerType === 'touch' ? 0.3 : 0.2;
-  const isClick = d => Math.hypot(d.p1[0] - d.p0[0], d.p1[1] - d.p0[1]) < 0.15;
-  function rectBars(d) {
-    const x0 = Math.min(d.p0[0], d.p1[0]), x1 = Math.max(d.p0[0], d.p1[0]), y0 = Math.min(d.p0[1], d.p1[1]), y1 = Math.max(d.p0[1], d.p1[1]);
-    if (isClick(d)) return d.k >= 0 && !st.L.frozen[d.k] && st.on[d.k] !== d.paint ? [d.k] : [];
-    const out = [];
-    for (let k = 0; k < st.L.nB; k++) {
-      const [mx, my] = mid(k);
-      if (mx >= x0 && mx <= x1 && my >= y0 && my <= y1 && !st.L.frozen[k] && st.on[k] !== d.paint) out.push(k);
-    }
-    return out;
+  // Knoten unter dem Zeiger (nah genug an einem Rasterknoten, der zum Bauteil gehört), sonst -1
+  function nodeNear([x, y], tol) {
+    const i = Math.round(x), j = Math.round(y);
+    if (Math.hypot(x - i, y - j) > tol || i < 0 || j < 0 || i > st.def.nx || j > st.def.ny) return -1;
+    const n = st.L.id(i, j);
+    return st.L.ij[n] ? n : -1;
   }
-  // Linie: Startknoten a, Endknoten b und die Stäbe dazwischen, die sich ändern
+  const touch = e => e.pointerType === 'touch';
+  const erases = k => st.on[k] === st.prof;
   function lineBars(d) {
     const a = [Math.round(d.p0[0]), Math.round(d.p0[1])], dx = d.p1[0] - a[0], dy = d.p1[1] - a[1];
     const o = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)), u = [Math.round(Math.cos(o * Math.PI / 4)), Math.round(Math.sin(o * Math.PI / 4))];
@@ -673,94 +721,92 @@
       const k = st.L.barAt(a[0] + u[0] * t, a[1] + u[1] * t, a[0] + u[0] * (t + 1), a[1] + u[1] * (t + 1));
       if (k >= 0) all.push(k);
     }
-    if (d.paint == null && all.length) d.paint = st.on[all[0]] ? 0 : 1;
-    return { a, b: [a[0] + u[0] * n, a[1] + u[1] * n], bars: all.filter(k => !st.L.frozen[k] && st.on[k] !== d.paint) };
+    const erase = all.length > 0 && erases(all[0]);
+    return { a, b: [a[0] + u[0] * n, a[1] + u[1] * n], erase,
+      bars: all.filter(k => erase ? st.on[k] && !st.L.frozen[k] : st.on[k] !== st.prof) };
   }
-  const lockedMsg = () => { $('verdict').innerHTML = '<p>Dieser Stab ist gesperrt: Er gehört zur Fahrbahn und bleibt.</p>'; };
+  const lockedMsg = () => { $('verdict').innerHTML = '<p>Dieser Stab ist gesperrt und bleibt. Sein Profil können Sie ändern: ein anderes Profil wählen und ihn antippen.</p>'; };
+  function hoverAt(p) {
+    const n = nodeNear(p, 0.18);
+    if (n >= 0) return { node: n };
+    const k = barNear(p, 0.2);
+    return k < 0 ? null : { k, erase: erases(k) };
+  }
+  const sameHover = (a, b) => (!a && !b) || (a && b && a.node === b.node && a.k === b.k && a.erase === b.erase);
 
   cv.addEventListener('pointerdown', e => {
     if (!editable() || !G) return;
-    const p = gridPt(e), k = barNear(p, tol(e));
+    const p = gridPt(e);
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
-    if (st.tool === 'line') { st.drag = { kind: 'line', p0: p, p1: p, paint: null }; render(); return; }
-    const paint = k >= 0 && !st.on[k] ? 1 : 0;
-    if (st.tool === 'rect') { st.drag = { kind: 'rect', p0: p, p1: p, k, paint }; render(); return; }
-    pushUndo();
-    st.drag = { kind: 'brush', last: p, paint, changed: false, tol: tol(e) };
-    if (k >= 0) { if (st.L.frozen[k]) lockedMsg(); else st.drag.changed = setBars([k], paint); }
-    if (st.drag.changed) refresh();
+    st.drag = { p0: p, p1: p, x0: e.clientX, y0: e.clientY, moved: false, k0: barNear(p, touch(e) ? 0.3 : 0.2), atNode: nodeNear(p, touch(e) ? 0.22 : 0.18) >= 0 };
+    st.hover = null;
   });
   cv.addEventListener('pointermove', e => {
     if (!G) return;
     const p = gridPt(e), d = st.drag;
     if (!d) {
-      if (e.pointerType === 'mouse' && editable()) { const k = barNear(p, 0.2); if (k !== st.hover) { st.hover = k; render(); } }
+      if (e.pointerType === 'mouse' && editable()) { const h = hoverAt(p); if (!sameHover(h, st.hover)) { st.hover = h; render(); } }
       return;
     }
-    if (d.kind === 'brush') {   // Zwischenpunkte, damit schnelle Striche keine Stäbe überspringen
-      const [x0, y0] = d.last, n = Math.ceil(Math.hypot(p[0] - x0, p[1] - y0) / 0.1) || 1, hit = new Set();
-      for (let i = 1; i <= n; i++) { const k = barNear([x0 + (p[0] - x0) * i / n, y0 + (p[1] - y0) * i / n], d.tol); if (k >= 0) hit.add(k); }
-      d.last = p;
-      if (setBars([...hit], d.paint)) { d.changed = true; refresh(); }
-      return;
-    }
-    d.p1 = p; render();
+    d.p1 = p;
+    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) d.moved = true;
+    if (d.moved) render();
   });
-  cv.addEventListener('pointerup', () => {
+  cv.addEventListener('pointerup', e => {
     const d = st.drag;
     st.drag = null;
     if (!d) return;
-    if (d.kind === 'brush') { if (!d.changed) st.undo.pop(); return; }
-    const list = d.kind === 'rect' ? rectBars(d) : lineBars(d).bars;
-    if (d.kind === 'rect' && isClick(d) && d.k >= 0 && st.L.frozen[d.k]) lockedMsg();
-    if (!list.length) return render();
-    pushUndo(); setBars(list, d.paint); refresh();
+    if (d.moved) {
+      const { bars, erase } = lineBars(d);
+      if (apply(bars, erase)) refresh(); else render();
+      return;
+    }
+    if (d.k0 < 0 || d.atNode) return;
+    const erase = erases(d.k0);
+    if (erase && st.L.frozen[d.k0]) { lockedMsg(); return; }
+    if (apply([d.k0], erase)) refresh();
+    if (e.pointerType === 'mouse') { st.hover = hoverAt(gridPt(e)); render(); }
   });
-  cv.addEventListener('pointercancel', () => { if (st.drag && st.drag.kind === 'brush' && !st.drag.changed) st.undo.pop(); st.drag = null; render(); });
-  cv.addEventListener('pointerleave', () => { if (st.hover >= 0) { st.hover = -1; render(); } });
+  cv.addEventListener('pointercancel', () => { st.drag = null; render(); });
+  cv.addEventListener('pointerleave', () => { if (st.hover) { st.hover = null; render(); } });
   addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-    const tool = { r: 'rect', p: 'brush', l: 'line' }[e.key.toLowerCase()];
-    if (tool) setTool(tool);
+    if (e.key === '1' || e.key === '2' || e.key === '3') setProf(+e.key);
   });
 
-  const setTool = t => {
-    st.tool = t;
-    $('t-rect').setAttribute('aria-pressed', String(t === 'rect'));
-    $('t-brush').setAttribute('aria-pressed', String(t === 'brush'));
-    $('t-line').setAttribute('aria-pressed', String(t === 'line'));
-  };
-  $('t-rect').onclick = () => setTool('rect');
-  $('t-brush').onclick = () => setTool('brush');
-  $('t-line').onclick = () => setTool('line');
+  for (const p of [1, 2, 3]) $('pr-' + p).onclick = () => setProf(p);
+  for (const m of LIVE) $('lv-' + m).onclick = () => setLive(m);
   $('g-truss').onclick = () => setModel('truss');
   $('g-frame').onclick = () => setModel('frame');
   $('b-submit').onclick = submit;
   $('b-probe').onclick = probe;
   $('b-undo').onclick = undo;
-  $('b-reset').onclick = () => {
-    if (!editable() || st.on.every(x => x)) return;
-    pushUndo(); st.on = st.L.domain.slice(); st.phase = 'design'; refresh();
-  };
   $('b-clear').onclick = () => {
     if (!editable()) return;
-    const empty = Uint8Array.from(st.L.frozen);
-    if (st.on.every((x, k) => x === empty[k])) return;
-    pushUndo(); st.on = empty; st.phase = 'design'; refresh();
+    const start = startOn(st.L);
+    if (st.on.every((x, k) => x === start[k])) return;
+    pushUndo(); st.on = start; st.phase = 'design'; refresh();
+  };
+  $('b-full').onclick = () => {
+    if (!editable() || st.on.every(x => x === st.prof)) return;
+    pushUndo(); st.on = Uint8Array.from(st.L.domain, () => st.prof); st.phase = 'design'; refresh();
   };
   $('b-retry').onclick = () => {
     if (st.busy) return;
-    st.animId++; st.on = st.L.domain.slice(); st.undo = []; st.probes = 1; st.phase = 'design';
+    st.animId++; st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design';
     $('stamp').hidden = true; refresh();
   };
   $('b-eso').onclick = toggleEso;
   $('b-next').onclick = () => { if (!st.busy) loadLevel((st.li + 1) % LEVELS.length); };
-  $('live').onchange = () => { if (editable()) { st.phase = 'design'; refresh(); } };
 
   $('levels').innerHTML = LEVELS.map((d, i) => `<button type="button" data-i="${i}">${i + 1} ${d.name}</button>`).join('');
   $('levels').onclick = e => { const b = e.target.closest('button'); if (b && !st.busy) loadLevel(+b.dataset.i); };
+  for (const p of [1, 2, 3]) {
+    const q = PROFILES[p - 1];
+    $('pr-' + p).title = `Taste ${p}: Quadratrohr ${q.name}, ${fmt(q.kgmm * 1000, 1)} kg/m`;
+  }
 
   $('legend').innerHTML = '<span class="lg-t">Auslastung je Stab in %</span><ol>' +
     BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : fmt(10 * b)}</span></li>`).join('') +
@@ -771,7 +817,7 @@
   new MutationObserver(repaint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   new ResizeObserver(() => { if (wrap.clientWidth && (!G || Math.abs(wrap.clientWidth - G.W) > 1)) { layout(); render(); } }).observe(wrap);
   addEventListener('resize', () => { layout(); render(); });
-  if (document.fonts) document.fonts.ready.then(render);
+  if (document.fonts) document.fonts.ready.then(() => { layout(); render(); });
 
   readColors();
   loadLevel(0);

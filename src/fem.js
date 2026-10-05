@@ -3,17 +3,23 @@
 const FEM = (() => {
   const GRID = 1000;                       // Rasterweite in mm
   const E = 210000, RE = 235;              // Stahl S235, MPa
-  // Querschnitt: Quadratrohr 40 × 40 × 3 (scharfkantig gerechnet)
-  const PB = 40, PT = 3, PI_ = PB - 2 * PT;
-  const AREA = PB * PB - PI_ * PI_;                  // mm²
-  const INERTIA = (PB ** 4 - PI_ ** 4) / 12;         // mm⁴
-  const WEL = INERTIA / (PB / 2);                    // mm³
-  const KG_MM = AREA * 7.85e-6;                      // kg je mm Stab
-  const PROFILE = `Quadratrohr ${PB} × ${PB} × ${PT}`;
-  const ncr = Lk => Math.PI ** 2 * E * INERTIA / (Lk * Lk);   // Euler, beidseitig gelenkig
+  // Querschnitte: Quadratrohre, scharfkantig gerechnet (A in mm², I in mm⁴, W in mm³, Masse in kg je mm Stab).
+  // Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
+  const PROFILES = [[40, 3], [60, 4], [80, 5]].map(([b, t]) => {
+    const bi = b - 2 * t, A = b * b - bi * bi, I = (b ** 4 - bi ** 4) / 12;
+    return { name: `${b} × ${b} × ${t}`, b, t, A, I, W: I / (b / 2), kgmm: A * 7.85e-6 };
+  });
+  const prof = x => PROFILES[x - 1];
+  const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
+  // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken.
+  // Ergebnis [Auslastung, knickt]
+  function barUtil(p, N, M, Lk) {
+    const uy = (Math.abs(N) / p.A + M / p.W) / RE, uk = N < 0 ? -N / ncr(p, Lk) : 0;
+    return [Math.max(uy, uk), uk > uy];
+  }
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
   // nehmen sie einen nennenswerten Teil der Arbeit der Last auf, ist das Stabwerk beweglich (Mechanismus).
-  const KS_T = 1e-11 * E * AREA / GRID, KS_R = 1e-11 * E * INERTIA / GRID, MECH = 0.01;
+  const KS_T = 1e-11 * E * PROFILES[0].A / GRID, KS_R = 1e-11 * E * PROFILES[0].I / GRID, MECH = 0.01;
 
   // Level aufbereiten. def: nx, ny (Rasterfelder), cut (Felder ohne Stäbe), supports [{ kind, nodes, side, fix }]
   // (fix: 1 u, 2 v, 4 Verdrehung), loads [{ node, fx, fy }] in N, frozen [[i0, j0, i1, j1], ...] (gesperrte Stäbe)
@@ -67,8 +73,9 @@ const FEM = (() => {
   }
   // Was über Stäbe am Lager hängt
   const attached = (L, on) => reach(L, on, L.supportNodes);
-  // Länge der Stäbe in mm
+  // Länge der Stäbe in mm und Masse in kg; set wählt Stäbe aus (Standard: alle vorhandenen)
   const length = (L, set) => L.bars.reduce((a, b, k) => a + (set[k] ? b.len : 0), 0);
+  const mass = (L, on, set = on) => L.bars.reduce((a, b, k) => a + (on[k] && set[k] ? b.len * prof(on[k]).kgmm : 0), 0);
 
   // Tragende Stäbe: am Lager, in einem Teil mit Last, ohne lose Enden (Stäbe, die an einem Knoten ohne Lager, Last und
   // weitere Stäbe enden, tragen nichts)
@@ -113,8 +120,8 @@ const FEM = (() => {
     const t0 = performance.now(), frame = model === 'frame', nd = frame ? 3 : 2;
     const conn = attached(L, on);
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, util: new Float32Array(L.nB),
-      N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1,
-      disp: null, mass: length(L, conn) * KG_MM, dofs: 0, bars: 0, ms: 0 };
+      N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB), fail: new Uint8Array(L.nB),
+      maxUtil: 0, maxBar: -1, disp: null, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0 };
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
     if (!L.loadNodes.every(n => hit.has(n))) { res.reason = 'lastpfad'; return res; }
@@ -134,7 +141,8 @@ const FEM = (() => {
       let lo = Infinity, hi = -1;
       for (const p of dof) if (p >= 0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }
       if (hi >= 0) bw = Math.max(bw, hi - lo);
-      els.push({ k, b, dof, K: frame ? frameK(b) : trussK(b) });
+      const p = prof(on[k]);
+      els.push({ k, b, p, dof, K: frame ? frameK(b, p) : trussK(b, p) });
     });
 
     const w = bw + 1;
@@ -198,20 +206,19 @@ const FEM = (() => {
     // Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler)
     let nY = 0, nK = 0;
     for (const el of els) {
-      const { k, b } = el, u = el.dof.map((p, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
+      const { k, b, p } = el, u = el.dof.map((q, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
       let N, M1 = 0, M2 = 0;
-      if (!frame) N = E * AREA / b.len * (b.c * (u[2] - u[0]) + b.s * (u[3] - u[1]));
+      if (!frame) N = E * p.A / b.len * (b.c * (u[2] - u[0]) + b.s * (u[3] - u[1]));
       else {
-        const ul = localU(b, u), EI = E * INERTIA, Lb = b.len;
-        N = E * AREA / Lb * (ul[3] - ul[0]);
+        const ul = localU(b, u), EI = E * p.I, Lb = b.len;
+        N = E * p.A / Lb * (ul[3] - ul[0]);
         const dv = 6 * EI / (Lb * Lb) * (ul[1] - ul[4]);   // Endmomente aus Kl * ul
         M1 = dv + EI / Lb * (4 * ul[2] + 2 * ul[5]);
         M2 = dv + EI / Lb * (2 * ul[2] + 4 * ul[5]);
       }
-      const sig = Math.abs(N) / AREA + Math.max(Math.abs(M1), Math.abs(M2)) / WEL;
-      const uy = sig / RE, uk = N < 0 ? -N / ncr(bucklingLength(L, fe, k)) : 0, util = Math.max(uy, uk);
-      res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.util[k] = util;
-      if (util > 1) { res.fail[k] = uk > uy ? 2 : 1; if (uk > uy) nK++; else nY++; }
+      const Lk = bucklingLength(L, fe, k), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.Lk[k] = Lk; res.util[k] = util;
+      if (util > 1) { res.fail[k] = knickt ? 2 : 1; if (knickt) nK++; else nY++; }
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.ok = res.maxUtil <= 1;
@@ -221,13 +228,13 @@ const FEM = (() => {
     return res;
   }
 
-  function trussK(b) {
-    const k = E * AREA / b.len, cc = b.c * b.c * k, cs = b.c * b.s * k, ss = b.s * b.s * k;
+  function trussK(b, p) {
+    const k = E * p.A / b.len, cc = b.c * b.c * k, cs = b.c * b.s * k, ss = b.s * b.s * k;
     return [cc, cs, -cc, -cs, cs, ss, -cs, -ss, -cc, -cs, cc, cs, -cs, -ss, cs, ss];
   }
   // Rahmenelement: lokale Steifigkeit, gedreht ins globale System (K = T^T Kl T)
-  function frameK(b) {
-    const L = b.len, a = E * AREA / L, EI = E * INERTIA, k1 = 12 * EI / L ** 3, k2 = 6 * EI / L ** 2, k3 = 4 * EI / L, k4 = 2 * EI / L;
+  function frameK(b, p) {
+    const L = b.len, a = E * p.A / L, EI = E * p.I, k1 = 12 * EI / L ** 3, k2 = 6 * EI / L ** 2, k3 = 4 * EI / L, k4 = 2 * EI / L;
     const Kl = [a, 0, 0, -a, 0, 0, 0, k1, k2, 0, -k1, k2, 0, k2, k3, 0, -k2, k4,
       -a, 0, 0, a, 0, 0, 0, -k1, -k2, 0, k1, -k2, 0, k2, k4, 0, -k2, k3];
     const T = tmat(b), K = new Array(36).fill(0);
@@ -248,31 +255,62 @@ const FEM = (() => {
   // globale Knotenwerte (u1, v1, t1, u2, v2, t2) in lokale (längs, quer, Verdrehung)
   const localU = (b, u) => [b.c * u[0] + b.s * u[1], -b.s * u[0] + b.c * u[1], u[2], b.c * u[3] + b.s * u[4], -b.s * u[3] + b.c * u[4], u[5]];
 
-  // ESO: immer den am geringsten ausgelasteten Stab entfernen, der sich entfernen lässt, bis keiner mehr geht.
-  // Stäbe, die nichts tragen, gehen zuerst. Generator, damit die Oberfläche zwischen den Rechnungen atmen kann.
-  function* eso(L, model) {
-    let on = L.domain.slice(), r = analyze(L, on, model);
-    const order = [];
-    if (!r.ok) return { res: r, order, on };
-    for (;;) {
-      const cand = [];
-      for (let k = 0; k < L.nB; k++) if (on[k] && !L.frozen[k]) cand.push(k);
-      cand.sort((a, b) => (r.fe[a] ? r.util[a] : -1) - (r.fe[b] ? r.util[b] : -1));
-      let next = null;
-      for (const k of cand) {
-        const trial = Uint8Array.from(on, (x, q) => x && r.conn[q] ? 1 : 0);
-        trial[k] = 0;
-        const t = analyze(L, trial, model);
-        yield order.length;
-        if (t.ok) { next = t; on = trial; order.push(k); break; }
+  // Bemessen (fully stressed design): Jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält.
+  // Die Kräfte lagern sich mit den Steifigkeiten um, also wiederholen, bis sich nichts mehr ändert; ab dem achten Durchgang
+  // wird nur noch vergrößert, damit es nicht hin und her springt. Stäbe, die nichts tragen, fallen weg (gesperrte bekommen
+  // das kleinste Profil). Ergebnis { on, res } oder null, wenn es beweglich ist oder auch das größte Profil nicht reicht.
+  // Generator: liefert nach jeder Rechnung einmal, damit die Oberfläche atmen kann.
+  function* size(L, on, model) {
+    const cur = Uint8Array.from(on);
+    for (let it = 0; it < 16; it++) {
+      const r = analyze(L, cur, model);
+      yield;
+      if (!r.disp || r.reason === 'mechanismus') return null;
+      let changed = false;
+      for (let k = 0; k < L.nB; k++) {
+        if (!cur[k]) continue;
+        let need;
+        if (!r.fe[k]) need = L.frozen[k] ? 1 : 0;
+        else {
+          const M = Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1]));
+          need = PROFILES.findIndex(p => barUtil(p, r.N[k], M, r.Lk[k])[0] <= 1) + 1 || PROFILES.length;
+          if (it >= 8) need = Math.max(need, cur[k]);
+        }
+        if (need !== cur[k]) { cur[k] = need; changed = true; }
       }
-      if (!next) break;
-      r = next;
+      if (!changed) return r.ok ? { on: cur, res: r } : null;
     }
-    return { res: r, order, on: Uint8Array.from(on, (x, q) => x && r.conn[q] ? 1 : 0) };
+    return null;
   }
 
-  return { GRID, E, RE, AREA, INERTIA, WEL, KG_MM, PROFILE, ncr, level, reach, attached, length, carrying, bucklingLength,
-    analyze, localU, eso };
+  // Gegner: alle Stäbe im mittleren Profil, bemessen. Dann immer den am geringsten ausgelasteten Stab entfernen und neu
+  // bemessen, solange es hält und leichter wird. Was beim Entfernen beweglich wird oder nicht mehr hält, wird nicht wieder
+  // versucht (mit weniger Stäben wird es nicht besser). Ergebnis { res, on, order }.
+  function* optimize(L, model) {
+    const start = Uint8Array.from(L.domain, () => 2);
+    let best = yield* size(L, start, model);
+    if (!best) return { res: analyze(L, start, model), on: start, order: [] };
+    const order = [], tabu = new Uint8Array(L.nB);
+    for (;;) {
+      const cand = [];
+      for (let k = 0; k < L.nB; k++) if (best.on[k] && !L.frozen[k] && !tabu[k]) cand.push(k);
+      cand.sort((a, b) => best.res.util[a] - best.res.util[b]);
+      const m = mass(L, best.on);
+      let next = null;
+      for (const k of cand) {
+        const trial = Uint8Array.from(best.on);
+        trial[k] = 0;
+        const t = yield* size(L, trial, model);
+        if (!t) tabu[k] = 1;
+        else if (mass(L, t.on) < m - 1e-6) { next = t; order.push(k); break; }
+      }
+      if (!next) break;
+      best = next;
+    }
+    return { res: best.res, on: best.on, order };
+  }
+
+  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, bucklingLength,
+    analyze, localU, size, optimize };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;

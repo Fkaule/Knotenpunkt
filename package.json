@@ -1,8 +1,8 @@
 {
   "name": "knotenpunkt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Stabwerk-Minispiel: Stäbe weglassen, bis das Tragwerk versagt, gerechnet als Fachwerk oder als Rahmen",
+  "description": "Stabwerk-Minispiel: ein Tragwerk aus Stäben bauen, so leicht wie möglich, gerechnet als Fachwerk oder als Rahmen",
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test"
