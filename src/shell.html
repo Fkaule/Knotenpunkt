@@ -248,21 +248,25 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <details class="rules">
           <summary>So wird gerechnet</summary>
           <ul>
-            <li>Stäbe aus Quadratrohr, Stahl S235, E = 210 GPa, Raster 1 m. Drei Profile: 40 × 3 (A = 4,4 cm², W = 5,1 cm³, 3,5 kg/m), 60 × 4 (9,0 cm², 15,7 cm³, 7,0 kg/m), 80 × 5 (15,0 cm², 35,3 cm³, 11,8 kg/m). Biegesteifigkeit und Knicklast wachsen schneller als die Masse.</li>
+            <li>Stäbe aus Quadratrohr nach EN 10219 (mit Eckradien), Stahl S235, E = 210 GPa, Raster 1 m. Drei Profile: 40 × 3 (A = 4,2 cm², W = 4,7 cm³, 3,3 kg/m), 60 × 4 (8,5 cm², 14,5 cm³, 6,7 kg/m), 80 × 5 (14,4 cm², 32,9 cm³, 11,3 kg/m). Biegesteifigkeit und Knicklast wachsen schneller als die Masse.</li>
             <li><b>Fachwerk:</b> Die Knoten sind Gelenke (Kreise), die Stäbe tragen nur Normalkraft. Jeder Stab ist ein Federelement mit EA / L. Ein Feld ohne Diagonale verschiebt sich: Das Fachwerk ist beweglich.</li>
             <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, braucht dafür aber dicke Profile.</li>
-            <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst. Ob das Stabwerk beweglich ist, zeigen sehr weiche Hilfsfedern an jedem Knoten: Nehmen sie einen spürbaren Teil der Arbeit der Last auf, ist es ein Mechanismus.</li>
-            <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager sitzt.</li>
+            <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst, linear.</li>
+            <li><b>Beweglich:</b> Gibt es eine Bewegung, bei der sich kein Stab dehnt (und im Rahmen keiner biegt), ist das Stabwerk ein Mechanismus, auch wenn die Last diese Bewegung gerade nicht anregt. Dazu zählt ein Querstab, der selbst nicht gehalten ist.</li>
+            <li><b>Instabil:</b> Druck macht ein Tragwerk weich. Die Prüfung mit elastischer plus geometrischer Steifigkeit zeigt, ob es unter den Druckkräften als Ganzes seitlich ausweicht, etwa ein Rahmen ohne Diagonale oder eine freie Kragstütze. Angezeigt wird der kritische Lastfaktor: über 1 hält es.</li>
+            <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer hält.</li>
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet.</li>
-            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden tragen nichts, zählen aber bei der Masse.</li>
-            <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird.</li>
+            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts, zählen aber bei der Masse.</li>
+            <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
           </ul>
         </details>
         <details class="rules">
           <summary>Was das Spiel vereinfacht</summary>
           <ul>
             <li>Linear gerechnet: kleine Verformungen, Werkstoff elastisch. „Bruch“ heißt: Ein Stab erreicht am Rand die Streckgrenze. Plastische Reserven bleiben ungenutzt.</li>
-            <li>Knicken nur je Stabzug nach Euler, ohne Imperfektionen und ohne Knicken des ganzen Rahmens. Im Rahmen wäre die Knicklänge zwischen steifen Knoten kürzer: Das Spiel rechnet dort auf der sicheren Seite.</li>
+            <li>Knicken nach Euler ohne Imperfektionen. Die Knickkurven der Norm (EN 1993-1-1) sind bis etwa Faktor 1,8 strenger, am meisten bei mittlerer Schlankheit, wie sie viele Diagonalen haben.</li>
+            <li>Die Stabilitätsprüfung des Ganzen rechnet je Stab ein Element. Für einzelne Stäbe ist sie dadurch etwas zu günstig, dort gilt der Euler-Nachweis je Stab.</li>
+            <li>Nur in der Ebene: Knicken aus der Ebene und Biegedrillknicken fehlen. Verformungen werden nicht begrenzt; ein Rahmen ohne Diagonale schwankt oft weit mehr, als man in echt zuließe.</li>
             <li>Knoten sind Punkte: Knotenbleche, Schrauben und Schweißnähte fehlen. Kreuzende Diagonalen sind nicht miteinander verbunden.</li>
             <li>Lasten greifen nur in Knoten an, Eigengewicht fehlt.</li>
             <li>Echte Fachwerke haben meist steife Knoten. Die Biegung, die dadurch entsteht, heißt Nebenspannung: Die Ansicht „Rahmen“ zeigt, wie groß sie ist.</li>

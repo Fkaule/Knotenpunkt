@@ -15,7 +15,7 @@ const LEVELS = (() => {
     { name: 'Tor', note: 'Stützen und Riegel sind vorgegeben, unten gelenkig gelagert, der Wind drückt oben links. Als Fachwerk ist das leere Tor beweglich, als Rahmen trägt es über Biegung, wenn die Profile dick genug sind.',
       nx: 3, ny: 3, margin: [0.6, 1.2, 1.3, 0.6], dim: [0.95, 0.75], dimSide: 'right',
       supports: [{ kind: 'fest', nodes: [[0, 0], [3, 0]], side: 'bottom', fix: 3 }],
-      loads: [{ node: [0, 3], fx: 5000, fy: 0 }],
+      loads: [{ node: [0, 3], fx: 4500, fy: 0 }],
       frozen: [...range(0, 2).map(j => [0, j, 0, j + 1]), ...range(0, 2).map(j => [3, j, 3, j + 1]), ...range(0, 2).map(i => [i, 3, i + 1, 3])] },
     { name: 'Brücke', note: 'Festlager links, Loslager rechts. Die Fahrbahn unten bleibt, an jedem ihrer Knoten hängt eine Last.',
       nx: 10, ny: 3, margin: [0.5, 0.9, 2.3, 1.2], dim: [1.85, 0.75],

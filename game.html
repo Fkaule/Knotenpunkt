@@ -248,21 +248,25 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <details class="rules">
           <summary>So wird gerechnet</summary>
           <ul>
-            <li>Stäbe aus Quadratrohr, Stahl S235, E = 210 GPa, Raster 1 m. Drei Profile: 40 × 3 (A = 4,4 cm², W = 5,1 cm³, 3,5 kg/m), 60 × 4 (9,0 cm², 15,7 cm³, 7,0 kg/m), 80 × 5 (15,0 cm², 35,3 cm³, 11,8 kg/m). Biegesteifigkeit und Knicklast wachsen schneller als die Masse.</li>
+            <li>Stäbe aus Quadratrohr nach EN 10219 (mit Eckradien), Stahl S235, E = 210 GPa, Raster 1 m. Drei Profile: 40 × 3 (A = 4,2 cm², W = 4,7 cm³, 3,3 kg/m), 60 × 4 (8,5 cm², 14,5 cm³, 6,7 kg/m), 80 × 5 (14,4 cm², 32,9 cm³, 11,3 kg/m). Biegesteifigkeit und Knicklast wachsen schneller als die Masse.</li>
             <li><b>Fachwerk:</b> Die Knoten sind Gelenke (Kreise), die Stäbe tragen nur Normalkraft. Jeder Stab ist ein Federelement mit EA / L. Ein Feld ohne Diagonale verschiebt sich: Das Fachwerk ist beweglich.</li>
             <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, braucht dafür aber dicke Profile.</li>
-            <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst. Ob das Stabwerk beweglich ist, zeigen sehr weiche Hilfsfedern an jedem Knoten: Nehmen sie einen spürbaren Teil der Arbeit der Last auf, ist es ein Mechanismus.</li>
-            <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager sitzt.</li>
+            <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst, linear.</li>
+            <li><b>Beweglich:</b> Gibt es eine Bewegung, bei der sich kein Stab dehnt (und im Rahmen keiner biegt), ist das Stabwerk ein Mechanismus, auch wenn die Last diese Bewegung gerade nicht anregt. Dazu zählt ein Querstab, der selbst nicht gehalten ist.</li>
+            <li><b>Instabil:</b> Druck macht ein Tragwerk weich. Die Prüfung mit elastischer plus geometrischer Steifigkeit zeigt, ob es unter den Druckkräften als Ganzes seitlich ausweicht, etwa ein Rahmen ohne Diagonale oder eine freie Kragstütze. Angezeigt wird der kritische Lastfaktor: über 1 hält es.</li>
+            <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer hält.</li>
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet.</li>
-            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden tragen nichts, zählen aber bei der Masse.</li>
-            <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird.</li>
+            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts, zählen aber bei der Masse.</li>
+            <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
           </ul>
         </details>
         <details class="rules">
           <summary>Was das Spiel vereinfacht</summary>
           <ul>
             <li>Linear gerechnet: kleine Verformungen, Werkstoff elastisch. „Bruch“ heißt: Ein Stab erreicht am Rand die Streckgrenze. Plastische Reserven bleiben ungenutzt.</li>
-            <li>Knicken nur je Stabzug nach Euler, ohne Imperfektionen und ohne Knicken des ganzen Rahmens. Im Rahmen wäre die Knicklänge zwischen steifen Knoten kürzer: Das Spiel rechnet dort auf der sicheren Seite.</li>
+            <li>Knicken nach Euler ohne Imperfektionen. Die Knickkurven der Norm (EN 1993-1-1) sind bis etwa Faktor 1,8 strenger, am meisten bei mittlerer Schlankheit, wie sie viele Diagonalen haben.</li>
+            <li>Die Stabilitätsprüfung des Ganzen rechnet je Stab ein Element. Für einzelne Stäbe ist sie dadurch etwas zu günstig, dort gilt der Euler-Nachweis je Stab.</li>
+            <li>Nur in der Ebene: Knicken aus der Ebene und Biegedrillknicken fehlen. Verformungen werden nicht begrenzt; ein Rahmen ohne Diagonale schwankt oft weit mehr, als man in echt zuließe.</li>
             <li>Knoten sind Punkte: Knotenbleche, Schrauben und Schweißnähte fehlen. Kreuzende Diagonalen sind nicht miteinander verbunden.</li>
             <li>Lasten greifen nur in Knoten an, Eigengewicht fehlt.</li>
             <li>Echte Fachwerke haben meist steife Knoten. Die Biegung, die dadurch entsteht, heißt Nebenspannung: Die Ansicht „Rahmen“ zeigt, wie groß sie ist.</li>
@@ -277,16 +281,15 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 
 <script>
 /* FE-Kern für Stabwerke: ebene Stäbe zwischen Rasterknoten, wahlweise als Fachwerk (Gelenkknoten, nur Normalkraft)
-   oder als Rahmen (biegesteife Knoten, Euler-Bernoulli-Balken). Band-Cholesky. Kein DOM. */
+   oder als Rahmen (biegesteife Knoten, Euler-Bernoulli-Balken). Linear gerechnet, dazu eine Kinematikprüfung und eine
+   Stabilitätsprüfung (elastische plus geometrische Steifigkeit). Band-Cholesky. Kein DOM. */
 const FEM = (() => {
   const GRID = 1000;                       // Rasterweite in mm
   const E = 210000, RE = 235;              // Stahl S235, MPa
-  // Querschnitte: Quadratrohre, scharfkantig gerechnet (A in mm², I in mm⁴, W in mm³, Masse in kg je mm Stab).
-  // Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
-  const PROFILES = [[40, 3], [60, 4], [80, 5]].map(([b, t]) => {
-    const bi = b - 2 * t, A = b * b - bi * bi, I = (b ** 4 - bi ** 4) / 12;
-    return { name: `${b} × ${b} × ${t}`, b, t, A, I, W: I / (b / 2), kgmm: A * 7.85e-6 };
-  });
+  // Querschnitte: Quadratrohre nach EN 10219-2 (Eckradien außen 2t, innen t), A in mm², I in mm⁴, W in mm³, Masse in kg
+  // je mm Stab. Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
+  const PROFILES = [[40, 3, 420.8, 93.2e3, 4.66e3], [60, 4, 854.8, 435.5e3, 14.52e3], [80, 5, 1435.6, 1314.4e3, 32.86e3]]
+    .map(([b, t, A, I, W]) => ({ name: `${b} × ${b} × ${t}`, b, t, A, I, W, kgmm: A * 7.85e-6 }));
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
   // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken.
@@ -298,6 +301,9 @@ const FEM = (() => {
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
   // nehmen sie einen nennenswerten Teil der Arbeit der Last auf, ist das Stabwerk beweglich (Mechanismus).
   const KS_T = 1e-11 * E * PROFILES[0].A / GRID, KS_R = 1e-11 * E * PROFILES[0].I / GRID, MECH = 0.01;
+  // Pivot unter TOL: in dieser Richtung hält nichts (beweglich oder instabil). KC: Querhalt an Durchlaufstellen in den Prüfungen.
+  const TOL = 1e-8 * E * PROFILES[0].A / GRID, KC = E * PROFILES[0].A / GRID;
+  const MODE = 1e6;   // Bewegungs- und Knickformen: größte Verschiebung in mm (beliebig groß, das Zeichnen skaliert)
 
   // Level aufbereiten. def: nx, ny (Rasterfelder), cut (Felder ohne Stäbe), supports [{ kind, nodes, side, fix }]
   // (fix: 1 u, 2 v, 4 Verdrehung), loads [{ node, fx, fy }] in N, frozen [[i0, j0, i1, j1], ...] (gesperrte Stäbe)
@@ -355,55 +361,111 @@ const FEM = (() => {
   const length = (L, set) => L.bars.reduce((a, b, k) => a + (set[k] ? b.len : 0), 0);
   const mass = (L, on, set = on) => L.bars.reduce((a, b, k) => a + (on[k] && set[k] ? b.len * prof(on[k]).kgmm : 0), 0);
 
-  // Tragende Stäbe: am Lager, in einem Teil mit Last, ohne lose Enden (Stäbe, die an einem Knoten ohne Lager, Last und
-  // weitere Stäbe enden, tragen nichts)
+  // Tragende Stäbe: am Lager, in einem Teil mit Last. Teile, die nur über einen einzigen Knoten am Rest hängen und weder
+  // Lager noch Last enthalten, tragen nichts (am einzigen Anschluss kann keine Kraft wirken); dazu zählen lose Enden.
   function carrying(L, conn) {
-    const fe = Uint8Array.from(conn), deg = new Int32Array(L.nN), keep = new Uint8Array(L.nN);
+    const fe = Uint8Array.from(conn), keep = new Uint8Array(L.nN);
     for (const n of L.supportNodes) keep[n] = 1;
     for (const n of L.loadNodes) keep[n] = 1;
-    L.bars.forEach((b, k) => { if (fe[k]) { deg[b.a]++; deg[b.b]++; } });
-    const stack = [];
-    for (let n = 0; n < L.nN; n++) if (deg[n] === 1 && !keep[n]) stack.push(n);
-    while (stack.length) {
-      const n = stack.pop();
-      if (deg[n] !== 1) continue;
-      const k = L.nodeBars[n].find(q => fe[q]);
-      fe[k] = 0; deg[n] = 0;
-      const m = L.bars[k].a === n ? L.bars[k].b : L.bars[k].a;
-      if (--deg[m] === 1 && !keep[m]) stack.push(m);
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let q = 0; q < L.nN; q++) {
+        const comp = new Uint8Array(L.nB);
+        for (const k0 of L.nodeBars[q]) {
+          if (!fe[k0] || comp[k0]) continue;
+          // alle Stäbe, die ohne den Knoten q mit k0 zusammenhängen
+          const part = [k0], seen = new Set([q]);
+          let anchored = false;
+          comp[k0] = 1;
+          for (let i = 0; i < part.length; i++) for (const m of [L.bars[part[i]].a, L.bars[part[i]].b]) {
+            if (seen.has(m)) continue;
+            seen.add(m);
+            if (keep[m]) anchored = true;
+            for (const k of L.nodeBars[m]) if (fe[k] && !comp[k]) { comp[k] = 1; part.push(k); }
+          }
+          if (!anchored) { for (const k of part) fe[k] = 0; changed = true; }
+        }
+      }
     }
     return reach(L, fe, L.loadNodes);
   }
 
-  // Knicklänge: gerader Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt
-  function bucklingLength(L, fe, k) {
-    let len = 0;
+  // Hält der Knoten n quer zum Stab b (Lager in beiden Richtungen, die quer zum Stab zählen)?
+  const heldAcross = (L, n, b) => (Math.abs(b.s) < 1e-9 || (L.fix[n] & 1)) && (Math.abs(b.c) < 1e-9 || (L.fix[n] & 2));
+  // Durchlaufstellen: Knoten mit genau zwei tragenden Stäben in einer Linie, quer nicht gelagert. Dort ist kein Knoten,
+  // der Stabzug läuft als ein Profil durch. Ergebnis Map Knoten -> Querrichtung [tx, ty]
+  function passNodes(L, fe) {
+    const out = new Map();
+    for (let n = 0; n < L.nN; n++) {
+      const ks = L.nodeBars[n].filter(k => fe[k]);
+      if (ks.length !== 2) continue;
+      const [p, q] = ks.map(k => L.bars[k]);
+      if (Math.abs(p.c * q.s - p.s * q.c) > 1e-9 || heldAcross(L, n, p)) continue;
+      out.set(n, [-p.s, p.c]);
+    }
+    return out;
+  }
+  // Knicklänge: gerader Stabzug über Durchlaufstellen bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein
+  // Lager quer hält. Ob dieser Knoten wirklich hält, prüft die Stabilitätsprüfung in analyze.
+  function bucklingLength(L, fe, k, pass = passNodes(L, fe)) {
+    let len = L.bars[k].len;
     for (const start of [L.bars[k].a, L.bars[k].b]) {
       let n = start, cur = k;
-      for (;;) {
-        const here = L.nodeBars[n].filter(q => fe[q] && q !== cur);
-        if (L.fix[n] || here.length !== 1) break;
-        const o = here[0], bo = L.bars[o], bc = L.bars[cur];
-        if (Math.abs(bo.c * bc.s - bo.s * bc.c) > 1e-9) break;   // nicht in einer Linie
+      while (pass.has(n)) {
+        const o = L.nodeBars[n].find(q => fe[q] && q !== cur), bo = L.bars[o];
         len += bo.len; cur = o; n = bo.a === n ? bo.b : bo.a;
       }
     }
-    return L.bars[k].len + len;
+    return len;
   }
 
-  let band = new Float64Array(0);
+  // Fachwerk: An Durchlaufstellen hat die Querrichtung nur die Hilfsfeder. Fürs Zeichnen dort die Querverschiebung linear
+  // zwischen den Enden des Stabzugs einsetzen, der Stabzug ist ein durchlaufendes Profil.
+  function straighten(L, fe, pass, disp) {
+    const done = new Uint8Array(L.nN);
+    for (const [q0, [tx, ty]] of pass) {
+      if (done[q0]) continue;
+      // Knoten des Zugs der Reihe nach, mit Abstand vom ersten Ende
+      const walk = (n, cur) => {
+        const out = [];
+        while (pass.has(n)) {
+          const o = L.nodeBars[n].find(q => fe[q] && q !== cur), bo = L.bars[o];
+          n = bo.a === n ? bo.b : bo.a; cur = o; out.push([n, bo.len]);
+        }
+        return out;
+      };
+      const [k1, k2] = L.nodeBars[q0].filter(k => fe[k]);
+      const left = walk(q0, k2).reverse(), right = walk(q0, k1);
+      // left: vom Knoten q0 über k1 weg (umgedreht: Ende zuerst), right: über k2 weg
+      const chain = [...left.map(([n]) => n), q0, ...right.map(([n]) => n)];
+      const lens = [...left.map(([, l]) => l), L.bars[k1].len, ...right.map(([, l]) => l)];
+      let s = 0;
+      const pos = chain.map((_, i) => (i ? (s += lens[i - 1]) : 0));
+      const total = pos[pos.length - 1], a = chain[0], b = chain[chain.length - 1];
+      const ta = disp[a * 3] * tx + disp[a * 3 + 1] * ty, tb = disp[b * 3] * tx + disp[b * 3 + 1] * ty;
+      chain.forEach((n, i) => {
+        if (!pass.has(n)) return;
+        done[n] = 1;
+        const t = pos[i] / total, d = (1 - t) * ta + t * tb - (disp[n * 3] * tx + disp[n * 3 + 1] * ty);
+        disp[n * 3] += d * tx; disp[n * 3 + 1] += d * ty;
+      });
+    }
+  }
 
-  // model: 'truss' (Fachwerk) oder 'frame' (Rahmen)
-  function analyze(L, on, model) {
+  let band = new Float64Array(0), band2 = new Float64Array(0);
+
+  // model: 'truss' (Fachwerk) oder 'frame' (Rahmen); quick: ohne Bewegungs- und Knickform (für Bemessung und Gegner)
+  function analyze(L, on, model, quick = false) {
     const t0 = performance.now(), frame = model === 'frame', nd = frame ? 3 : 2;
     const conn = attached(L, on);
-    const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, util: new Float32Array(L.nB),
-      N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB), fail: new Uint8Array(L.nB),
-      maxUtil: 0, maxBar: -1, disp: null, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0 };
+    const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
+      util: new Float64Array(L.nB), N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB),
+      fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1, disp: null, lambda: NaN, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0 };
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
     if (!L.loadNodes.every(n => hit.has(n))) { res.reason = 'lastpfad'; return res; }
-    const fe = res.fe = carrying(L, conn);
+    const fe = res.fe = carrying(L, conn), pass = passNodes(L, fe);
+    for (const q of pass.keys()) res.pass[q] = 1;
 
     // Freiheitsgrade: je aktivem Knoten u, v (und beim Rahmen die Verdrehung)
     const eq = new Int32Array(L.nN * 3).fill(-1), active = new Uint8Array(L.nN);
@@ -411,7 +473,7 @@ const FEM = (() => {
     let n = 0;
     for (let q = 0; q < L.nN; q++) if (active[q]) for (let d = 0; d < nd; d++) if (!(L.fix[q] & (1 << d))) eq[q * 3 + d] = n++;
     const els = [];
-    let bw = 0;
+    let bw = 1;
     L.bars.forEach((b, k) => {
       if (!fe[k]) return;
       const dof = [];
@@ -420,68 +482,115 @@ const FEM = (() => {
       for (const p of dof) if (p >= 0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }
       if (hi >= 0) bw = Math.max(bw, hi - lo);
       const p = prof(on[k]);
-      els.push({ k, b, p, dof, K: frame ? frameK(b, p) : trussK(b, p) });
+      els.push({ k, b, p, dof, K: frame ? frameK(b, p) : trussK(b, p), N: 0 });
     });
-
     const w = bw + 1;
-    if (band.length < n * w) band = new Float64Array(n * w);
-    const A = band;
-    A.fill(0, 0, n * w);
-    for (const el of els) {
-      const m = el.dof.length;
-      for (let a = 0; a < m; a++) {
-        const p = el.dof[a];
-        if (p < 0) continue;
-        for (let c = 0; c < m; c++) { const q = el.dof[c]; if (q >= p) A[p * w + q - p] += el.K[a * m + c]; }
-      }
-    }
+    if (band.length < n * w) { band = new Float64Array(n * w); band2 = new Float64Array(n * w); }
     const ks = new Float64Array(n);
     for (let q = 0; q < L.nN; q++) for (let d = 0; d < nd; d++) { const p = eq[q * 3 + d]; if (p >= 0) ks[p] = d < 2 ? KS_T : KS_R; }
-    for (let p = 0; p < n; p++) A[p * w] += ks[p];
-    const x = new Float64Array(n);
+    const geoK = (el, N) => frame ? frameKG(el.b, N) : trussKG(el.b, N);
+
+    // Band-Matrix (obere Hälfte, Zeile p hält K[p][p..p+bw]): elastisch, dazu wahlweise geometrisch (geo(el) liefert die
+    // Normalkraft oder null) und der Querhalt an Durchlaufstellen (nur Fachwerk, dort gilt das Knicken des Stabzugs)
+    const put = (A, p, q, v) => { if (p >= 0 && q >= 0) A[Math.min(p, q) * w + Math.abs(q - p)] += v; };
+    function build(A, geo, hold) {
+      A.fill(0, 0, n * w);
+      for (const el of els) {
+        const m = el.dof.length, G = geo && geo(el) != null ? geoK(el, geo(el)) : null;
+        for (let a = 0; a < m; a++) for (let c = a; c < m; c++) {
+          const v = el.K[a * m + c] + (G ? G[a * m + c] : 0);
+          if (el.dof[a] === el.dof[c]) put(A, el.dof[a], el.dof[c], c === a ? v : 2 * v);
+          else put(A, el.dof[a], el.dof[c], v);
+        }
+      }
+      for (let p = 0; p < n; p++) A[p * w] += ks[p];
+      if (hold) for (const [q, [tx, ty]] of pass) {
+        const du = eq[q * 3], dv = eq[q * 3 + 1];
+        put(A, du, du, KC * tx * tx); put(A, dv, dv, KC * ty * ty); put(A, du, dv, KC * tx * ty);
+      }
+    }
+    // Cholesky A = U^T U (in place). Bricht beim ersten Pivot unter thr ab; Ergebnis: kleinster Pivot bzw. der Abbruchwert
+    function factor(A, thr) {
+      let min = Infinity;
+      for (let i = 0; i < n; i++) {
+        const r = i * w, m = Math.min(bw, n - 1 - i);
+        if (!(A[r] > thr)) return A[r];
+        min = Math.min(min, A[r]);
+        const d = Math.sqrt(A[r]);
+        A[r] = d;
+        for (let k = 1; k <= m; k++) A[r + k] /= d;
+        for (let k = 1; k <= m; k++) {
+          const g = A[r + k];
+          if (g === 0) continue;
+          const row = (i + k) * w - k;
+          for (let l = k; l <= m; l++) A[row + l] -= g * A[r + l];
+        }
+      }
+      return min;
+    }
+    function solve(A, x) {
+      for (let i = 0; i < n; i++) {
+        const r = i * w, m = Math.min(bw, n - 1 - i);
+        const yi = (x[i] /= A[r]);
+        for (let k = 1; k <= m; k++) x[i + k] -= A[r + k] * yi;
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        const r = i * w, m = Math.min(bw, n - 1 - i);
+        let s = x[i];
+        for (let k = 1; k <= m; k++) s -= A[r + k] * x[i + k];
+        x[i] = s / A[r];
+      }
+    }
+    // Verschiebungen je Knoten (u, v in mm, Verdrehung in rad) aus einem Lösungsvektor; im Fachwerk Stabzüge gerade
+    const toDisp = (x, straight) => {
+      const d = new Float64Array(L.nN * 3);
+      for (let q = 0; q < L.nN; q++) for (let e = 0; e < nd; e++) { const p = eq[q * 3 + e]; if (p >= 0) d[q * 3 + e] = x[p]; }
+      if (straight && !frame) straighten(L, fe, pass, d);
+      return d;
+    };
+    // kleinste Eigenform von A φ = λ B φ per inverser Iteration (A zerlegt; ohne B: B = Einheitsmatrix)
+    function inverse(A, Bmul, iters) {
+      let x = Float64Array.from({ length: n }, (_, i) => 1 + ((i * 7919) % 13) / 13), lam = NaN;
+      for (let it = 0; it < iters; it++) {
+        const y = Bmul ? Bmul(x) : x.slice(), z = y.slice();
+        solve(A, z);
+        let num = 0, den = 0, mx = 0;
+        for (let i = 0; i < n; i++) { num += x[i] * y[i]; den += z[i] * y[i]; mx = Math.max(mx, Math.abs(z[i])); }
+        lam = num / den;
+        if (!(mx > 0)) break;
+        for (let i = 0; i < n; i++) x[i] = z[i] / mx;
+      }
+      return { x, lam };
+    }
+    // Form auf MODE skalieren (größte Knotenverschiebung)
+    const scaled = d => {
+      let m = 0;
+      for (let q = 0; q < L.nN; q++) m = Math.max(m, Math.hypot(d[q * 3], d[q * 3 + 1]));
+      if (m > 0) for (let i = 0; i < d.length; i++) d[i] *= MODE / m;
+      return d;
+    };
+    res.dofs = n; res.bars = els.length;
+    const done = reason => { res.reason = reason; res.ms = performance.now() - t0; return res; };
+
+    // 1. Lineare Lösung mit den Hilfsfedern
+    const A = band, x = new Float64Array(n);
+    build(A, null, false);
+    const p0 = factor(A, 0);
+    if (!(p0 > 0)) return done('mechanismus');
     for (const q of L.loadNodes) {
       if (eq[q * 3] >= 0) x[eq[q * 3]] += L.fx[q];
       if (eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += L.fy[q];
     }
     const f = Float64Array.from(x);
+    solve(A, x);
+    // Mechanismus, den die Last anregt: die weichen Federn nehmen einen nennenswerten Teil der Arbeit auf.
+    // Lasten, die nur auf Lagern sitzen, leisten keine Arbeit; dann entscheidet allein die Kinematikprüfung.
+    let work = 0, spring = 0, fsum = 0;
+    for (let p = 0; p < n; p++) { work += f[p] * x[p]; spring += ks[p] * x[p] * x[p]; fsum += Math.abs(f[p]); }
+    if (fsum > 0 && (!(work > 0) || spring > MECH * work)) { res.disp = toDisp(x, false); return done('mechanismus'); }
+    const disp = toDisp(x, false);
 
-    // Cholesky A = U^T U (in place), dann Vorwärts- und Rückwärtseinsetzen
-    for (let i = 0; i < n; i++) {
-      const r = i * w, m = Math.min(bw, n - 1 - i);
-      if (!(A[r] > 0)) { res.reason = 'mechanismus'; return res; }
-      const d = Math.sqrt(A[r]);
-      A[r] = d;
-      for (let k = 1; k <= m; k++) A[r + k] /= d;
-      for (let k = 1; k <= m; k++) {
-        const g = A[r + k];
-        if (g === 0) continue;
-        const row = (i + k) * w - k;
-        for (let l = k; l <= m; l++) A[row + l] -= g * A[r + l];
-      }
-    }
-    for (let i = 0; i < n; i++) {
-      const r = i * w, m = Math.min(bw, n - 1 - i);
-      const yi = (x[i] /= A[r]);
-      for (let k = 1; k <= m; k++) x[i + k] -= A[r + k] * yi;
-    }
-    for (let i = n - 1; i >= 0; i--) {
-      const r = i * w, m = Math.min(bw, n - 1 - i);
-      let s = x[i];
-      for (let k = 1; k <= m; k++) s -= A[r + k] * x[i + k];
-      x[i] = s / A[r];
-    }
-
-    // Verschiebungen je Knoten (u, v in mm, Verdrehung in rad) fürs Zeichnen
-    const disp = res.disp = new Float64Array(L.nN * 3);
-    for (let q = 0; q < L.nN; q++) for (let d = 0; d < nd; d++) { const p = eq[q * 3 + d]; if (p >= 0) disp[q * 3 + d] = x[p]; }
-    res.dofs = n; res.bars = els.length;
-
-    // Mechanismus: die weichen Federn nehmen einen nennenswerten Teil der Arbeit auf
-    let work = 0, spring = 0;
-    for (let p = 0; p < n; p++) { work += f[p] * x[p]; spring += ks[p] * x[p] * x[p]; }
-    if (!(work > 0) || spring > MECH * work) { res.reason = 'mechanismus'; res.ms = performance.now() - t0; return res; }
-
-    // Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler)
+    // 2. Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler, Stabzug)
     let nY = 0, nK = 0;
     for (const el of els) {
       const { k, b, p } = el, u = el.dof.map((q, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
@@ -494,27 +603,79 @@ const FEM = (() => {
         M1 = dv + EI / Lb * (4 * ul[2] + 2 * ul[5]);
         M2 = dv + EI / Lb * (2 * ul[2] + 4 * ul[5]);
       }
-      const Lk = bucklingLength(L, fe, k), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      const Lk = bucklingLength(L, fe, k, pass), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      el.N = N;
       res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.Lk[k] = Lk; res.util[k] = util;
       if (util > 1) { res.fail[k] = knickt ? 2 : 1; if (knickt) nK++; else nY++; }
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
-    res.ok = res.maxUtil <= 1;
-    res.reason = res.ok ? '' : res.fail[res.maxBar] === 2 ? 'knicken' : 'spannung';
     res.nYield = nY; res.nBuckle = nK;
-    res.ms = performance.now() - t0;
-    return res;
+
+    // 3. Kinematik, unabhängig von der Last: Gibt es eine Bewegung, die keinen Stab dehnt (und keinen Rahmenstab biegt)?
+    // Im Fachwerk sind die Durchlaufstellen dabei quer gehalten. Im Rahmen ist das die Matrix aus Schritt 1.
+    let kin = p0;
+    if (!frame) { build(A, null, true); kin = factor(A, 0); }
+    if (!(kin >= TOL)) {
+      if (!quick) res.disp = scaled(toDisp(inverse(A, null, 4).x, true));   // A ist zerlegt (die Hilfsfedern halten sie positiv)
+      return done('mechanismus');
+    }
+
+    // 4. Stabilität: elastische plus geometrische Steifigkeit (Druck macht weich, Zug steif). Nicht positiv definit heißt:
+    // Das Tragwerk weicht unter den Druckkräften als Ganzes aus, auch wenn jeder Stabzug für sich nicht knickt. Geprüft wird
+    // nur, wenn die Stäbe für sich halten; sonst ist das Urteil schon gefallen. Ohne quick dazu Knickform und kritischer
+    // Lastfaktor λ aus (K + K_G,Zug) φ = λ (-K_G,Druck) φ.
+    const fails = res.maxUtil > 1, compressed = els.some(el => el.N < 0);
+    let unstable = false;
+    if (!fails && compressed) { build(A, el => el.N, !frame); unstable = !(factor(A, TOL) >= TOL); }
+    if (!quick && compressed) {
+      const B = band2;
+      build(B, el => el.N > 0 ? el.N : null, !frame);
+      factor(B, 0);
+      const Bmul = v => {
+        const y = new Float64Array(n);
+        for (const el of els) if (el.N < 0) {
+          const G = geoK(el, el.N), m = el.dof.length;
+          for (let a = 0; a < m; a++) {
+            const pa = el.dof[a];
+            if (pa < 0) continue;
+            for (let c = 0; c < m; c++) { const pc = el.dof[c]; if (pc >= 0) y[pa] -= G[a * m + c] * v[pc]; }
+          }
+        }
+        return y;
+      };
+      const { x: phi, lam } = inverse(B, Bmul, 30);
+      res.lambda = lam;
+      if (unstable) res.disp = scaled(toDisp(phi, true));
+    } else if (!compressed) res.lambda = Infinity;
+    if (unstable) return done('stabil');
+
+    res.disp = quick || frame ? disp : (straighten(L, fe, pass, disp), disp);
+    res.ok = !fails;
+    return done(res.ok ? '' : res.fail[res.maxBar] === 2 ? 'knicken' : 'spannung');
   }
 
   function trussK(b, p) {
     const k = E * p.A / b.len, cc = b.c * b.c * k, cs = b.c * b.s * k, ss = b.s * b.s * k;
     return [cc, cs, -cc, -cs, cs, ss, -cs, -ss, -cc, -cs, cc, cs, -cs, -ss, cs, ss];
   }
+  // Geometrische Steifigkeit des Fachwerkstabs (N positiv als Zug): N/L quer zum Stab
+  function trussKG(b, N) {
+    const g = N / b.len, xx = b.s * b.s * g, xy = -b.s * b.c * g, yy = b.c * b.c * g;
+    return [xx, xy, -xx, -xy, xy, yy, -xy, -yy, -xx, -xy, xx, xy, -xy, -yy, xy, yy];
+  }
   // Rahmenelement: lokale Steifigkeit, gedreht ins globale System (K = T^T Kl T)
   function frameK(b, p) {
     const L = b.len, a = E * p.A / L, EI = E * p.I, k1 = 12 * EI / L ** 3, k2 = 6 * EI / L ** 2, k3 = 4 * EI / L, k4 = 2 * EI / L;
-    const Kl = [a, 0, 0, -a, 0, 0, 0, k1, k2, 0, -k1, k2, 0, k2, k3, 0, -k2, k4,
-      -a, 0, 0, a, 0, 0, 0, -k1, -k2, 0, k1, -k2, 0, k2, k4, 0, -k2, k3];
+    return rotate(b, [a, 0, 0, -a, 0, 0, 0, k1, k2, 0, -k1, k2, 0, k2, k3, 0, -k2, k4,
+      -a, 0, 0, a, 0, 0, 0, -k1, -k2, 0, k1, -k2, 0, k2, k4, 0, -k2, k3]);
+  }
+  // Geometrische Steifigkeit des Rahmenelements, konsistent zum kubischen Ansatz (N positiv als Zug)
+  function frameKG(b, N) {
+    const L = b.len, g = N / L, a = 6 / 5 * g, c = L / 10 * g, d = 2 * L * L / 15 * g, e = -L * L / 30 * g;
+    return rotate(b, [0, 0, 0, 0, 0, 0, 0, a, c, 0, -a, c, 0, c, d, 0, -c, e,
+      0, 0, 0, 0, 0, 0, 0, -a, -c, 0, a, -c, 0, c, e, 0, -c, d]);
+  }
+  function rotate(b, Kl) {
     const T = tmat(b), K = new Array(36).fill(0);
     for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
       let s = 0;
@@ -535,16 +696,22 @@ const FEM = (() => {
 
   // Bemessen (fully stressed design): Jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält.
   // Die Kräfte lagern sich mit den Steifigkeiten um, also wiederholen, bis sich nichts mehr ändert; ab dem achten Durchgang
-  // wird nur noch vergrößert, damit es nicht hin und her springt. Stäbe, die nichts tragen, fallen weg (gesperrte bekommen
-  // das kleinste Profil). Ergebnis { on, res } oder null, wenn es beweglich ist oder auch das größte Profil nicht reicht.
+  // wird nur noch vergrößert, damit es nicht hin und her springt. Versagt die Stabilität des Ganzen, werden die
+  // gedrückten Stäbe vergrößert. Stäbe, die nichts tragen, fallen weg (gesperrte bekommen das kleinste Profil).
+  // Reicht es nicht, einmal neu mit dem kleinsten Profil beginnen. Ergebnis { on, res } oder null.
   // Generator: liefert nach jeder Rechnung einmal, damit die Oberfläche atmen kann.
-  function* size(L, on, model) {
+  function* size(L, on, model, retry = true) {
     const cur = Uint8Array.from(on);
     for (let it = 0; it < 16; it++) {
-      const r = analyze(L, cur, model);
+      const r = analyze(L, cur, model, true);
       yield;
       if (!r.disp || r.reason === 'mechanismus') return null;
       let changed = false;
+      if (r.reason === 'stabil') {
+        for (let k = 0; k < L.nB; k++) if (cur[k] && r.fe[k] && r.N[k] < 0 && cur[k] < PROFILES.length) { cur[k]++; changed = true; }
+        if (changed) continue;
+        break;
+      }
       for (let k = 0; k < L.nB; k++) {
         if (!cur[k]) continue;
         let need;
@@ -556,23 +723,24 @@ const FEM = (() => {
         }
         if (need !== cur[k]) { cur[k] = need; changed = true; }
       }
-      if (!changed) return r.ok ? { on: cur, res: r } : null;
+      if (!changed) { if (r.ok) return { on: cur, res: r }; break; }
     }
-    return null;
+    return retry ? yield* size(L, Uint8Array.from(on, x => x ? 1 : 0), model, false) : null;
   }
 
   // Gegner: alle Stäbe im mittleren Profil, bemessen. Dann immer den am geringsten ausgelasteten Stab entfernen und neu
-  // bemessen, solange es hält und leichter wird. Was beim Entfernen beweglich wird oder nicht mehr hält, wird nicht wieder
-  // versucht (mit weniger Stäben wird es nicht besser). Ergebnis { res, on, order }.
-  function* optimize(L, model) {
-    const start = Uint8Array.from(L.domain, () => 2);
-    let best = yield* size(L, start, model);
-    if (!best) return { res: analyze(L, start, model), on: start, order: [] };
-    const order = [], tabu = new Uint8Array(L.nB);
+  // bemessen, solange es hält und leichter wird; was beim Entfernen beweglich wird oder nicht mehr hält, wird nicht wieder
+  // versucht. noise stört die Reihenfolge zufällig (seed: wiederholbar).
+  function* descend(L, model, noise, seed) {
+    let best = yield* size(L, Uint8Array.from(L.domain, () => 2), model);
+    if (!best) return null;
+    let s = seed;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const tabu = new Uint8Array(L.nB);
     for (;;) {
-      const cand = [];
-      for (let k = 0; k < L.nB; k++) if (best.on[k] && !L.frozen[k] && !tabu[k]) cand.push(k);
-      cand.sort((a, b) => best.res.util[a] - best.res.util[b]);
+      const cand = [], key = new Float64Array(L.nB);
+      for (let k = 0; k < L.nB; k++) if (best.on[k] && !L.frozen[k] && !tabu[k]) { cand.push(k); key[k] = best.res.util[k] * (1 + noise * (rnd() - 0.5)); }
+      cand.sort((a, b) => key[a] - key[b]);
       const m = mass(L, best.on);
       let next = null;
       for (const k of cand) {
@@ -580,15 +748,37 @@ const FEM = (() => {
         trial[k] = 0;
         const t = yield* size(L, trial, model);
         if (!t) tabu[k] = 1;
-        else if (mass(L, t.on) < m - 1e-6) { next = t; order.push(k); break; }
+        else if (mass(L, t.on) < m - 1e-6) { next = t; break; }
       }
       if (!next) break;
       best = next;
     }
-    return { res: best.res, on: best.on, order };
+    return best;
+  }
+  // Der gierige Weg hängt vom Start ab. Darum mehrere Läufe: im eigenen Modell, im anderen Modell (dessen Ergebnis wird im
+  // eigenen neu bemessen) und zwei mit gestörter Reihenfolge; das leichteste Ergebnis gewinnt. Zum Schluss je Stab ein
+  // Profil kleiner versuchen. Ergebnis { res, on }.
+  function* optimize(L, model) {
+    let best = null;
+    const runs = [[model, 0, 1], [model === 'truss' ? 'frame' : 'truss', 0, 1], [model, 0.5, 4711], [model, 0.5, 815]];
+    for (const [m, noise, seed] of runs) {
+      let r = yield* descend(L, m, noise, seed);
+      if (r && m !== model) r = yield* size(L, r.on, model);
+      if (r && (!best || mass(L, r.on) < mass(L, best.on) - 1e-6)) best = r;
+    }
+    if (!best) { const on = Uint8Array.from(L.domain, () => 2); return { res: analyze(L, on, model), on }; }
+    const order = Array.from(best.on.keys()).filter(k => best.on[k] > 1).sort((a, b) => best.res.util[a] - best.res.util[b]);
+    for (const k of order) {
+      const trial = Uint8Array.from(best.on);
+      trial[k]--;
+      const r = analyze(L, trial, model, true);
+      yield;
+      if (r.ok) best = { on: trial, res: r };
+    }
+    return { res: best.res, on: best.on };
   }
 
-  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, bucklingLength,
+  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, bucklingLength,
     analyze, localU, size, optimize };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;
@@ -610,7 +800,7 @@ const LEVELS = (() => {
     { name: 'Tor', note: 'Stützen und Riegel sind vorgegeben, unten gelenkig gelagert, der Wind drückt oben links. Als Fachwerk ist das leere Tor beweglich, als Rahmen trägt es über Biegung, wenn die Profile dick genug sind.',
       nx: 3, ny: 3, margin: [0.6, 1.2, 1.3, 0.6], dim: [0.95, 0.75], dimSide: 'right',
       supports: [{ kind: 'fest', nodes: [[0, 0], [3, 0]], side: 'bottom', fix: 3 }],
-      loads: [{ node: [0, 3], fx: 5000, fy: 0 }],
+      loads: [{ node: [0, 3], fx: 4500, fy: 0 }],
       frozen: [...range(0, 2).map(j => [0, j, 0, j + 1]), ...range(0, 2).map(j => [3, j, 3, j + 1]), ...range(0, 2).map(i => [i, 3, i + 1, 3])] },
     { name: 'Brücke', note: 'Festlager links, Loslager rechts. Die Fahrbahn unten bleibt, an jedem ihrer Knoten hängt eine Last.',
       nx: 10, ny: 3, margin: [0.5, 0.9, 2.3, 1.2], dim: [1.85, 0.75],
@@ -663,6 +853,10 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   const BANDS = Array.from({ length: 10 }, (_, b) => ramp((b + 0.5) / 10));
   const OVER = '#ff2e88';
   const bandOf = u => u > 1 ? OVER : BANDS[Math.min(9, Math.floor(Math.max(0, u) * 10))];
+  // Versagen des Ganzen: beweglich oder instabil; res.disp zeigt dann die Bewegungs- oder Knickform
+  const modeShape = r => r.reason === 'mechanismus' || r.reason === 'stabil';
+  // Auslastung in Prozent, um 100 % mit einer Nachkommastelle, damit „hält“ und „versagt“ nie dieselbe Zahl zeigen
+  const pct = u => { const x = 100 * u; return fmt(x, x >= 99.5 && x < 100.5 ? 1 : 0); };
 
   // on: je Stab 0 (kein Stab) oder Profil 1 bis 3. model: Rechenmodell, das gewertet wird; shown: Modell in der
   // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; liveDef, liveUtil: beim Zeichnen
@@ -819,7 +1013,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // Stäbe im Entwurf: Stahl mit Umriss, Strichstärke nach Profil, gesperrte dunkler; ohne Verbindung zum Lager rot gestrichelt.
   // Knoten: Fachwerk als Gelenk (Kreis), Rahmen als steifer Knoten (Quadrat)
-  function drawBars(on, conn, model, only = () => true) {
+  function drawBars(on, conn, model, only = () => true, pass = st.pass) {
     const L = st.L, set = [], loose = [];
     for (let k = 0; k < L.nB; k++) if (on[k] && only(k)) (conn[k] ? set : loose).push(k);
     ctx.save(); ctx.lineCap = 'round';
@@ -827,7 +1021,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     for (const k of set) strokeBar([P(L.bars[k].p), P(L.bars[k].q)], bwOf(on[k]), L.frozen[k] ? C.steel2 : C.steel);
     ctx.restore();
     drawLoose(loose, on);
-    drawNodes(set, on, model, n => P(L.ij[n]));
+    drawNodes(set, on, model, n => P(L.ij[n]), pass);
   }
   function drawLoose(list, on) {
     if (!list.length) return;
@@ -835,23 +1029,14 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     for (const k of list) strokeBar([P(st.L.bars[k].p), P(st.L.bars[k].q)], Math.max(2, bwOf(on[k]) * 0.6), C.loose);
     ctx.restore();
   }
-  // Knotensymbol so groß wie der dickste Stab am Knoten. Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten:
-  // Er läuft als ein Profil durch (Knicklänge über den ganzen Zug), dort steht kein Symbol. Lager und Lastpunkte bleiben Knoten.
-  function drawNodes(bars, on, model, pos) {
-    const L = st.L, size = new Map(), at = new Map();
-    for (const k of bars) for (const n of [L.bars[k].a, L.bars[k].b]) {
-      size.set(n, Math.max(size.get(n) || 0, bwOf(on[k])));
-      at.set(n, (at.get(n) || []).concat(k));
-    }
-    const through = n => {
-      const ks = at.get(n);
-      if (ks.length !== 2 || L.fix[n] || L.loadNodes.includes(n)) return false;
-      const [p, q] = ks.map(k => L.bars[k]);
-      return Math.abs(p.c * q.s - p.s * q.c) < 1e-9;
-    };
+  // Knotensymbol so groß wie der dickste Stab am Knoten. An Durchlaufstellen (pass, aus der Rechnung: genau zwei tragende
+  // Stäbe in einer Linie, quer nicht gelagert) ist kein Knoten, der Stabzug läuft als ein Profil durch.
+  function drawNodes(bars, on, model, pos, pass) {
+    const L = st.L, size = new Map();
+    for (const k of bars) for (const n of [L.bars[k].a, L.bars[k].b]) size.set(n, Math.max(size.get(n) || 0, bwOf(on[k])));
     ctx.save(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.ink;
     for (const [n, w] of size) {
-      if (through(n)) continue;
+      if (pass && pass[n]) continue;
       const [x, y] = pos(n);
       ctx.beginPath();
       if (model === 'truss') { ctx.arc(x, y, w * 0.72, 0, 7); ctx.fillStyle = C.sheet; ctx.fill(); ctx.stroke(); }
@@ -893,12 +1078,12 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function drawResult(v) {
     const L = st.L, r = v.res, on = v.on;
     const falling = k => v.fall && v.fall.p > 0 && v.fall.set[k];
-    if (!r.disp) drawBars(on, r.conn, r.model, k => !falling(k));
+    if (!r.disp) drawBars(on, r.conn, r.model, k => !falling(k), r.pass || st.pass);
     else {
-      const mech = r.reason === 'mechanismus', colors = !mech && (!v.live || v.colors);
+      const mech = modeShape(r), colors = !mech && (!v.live || v.colors);
       const sweepX = v.sweep == null ? Infinity : v.sweep * L.def.nx;
       const scale = v.scale * (v.defo == null ? 1 : v.defo), shown = k => r.fe[k] && !falling(k) && mid(k)[0] <= sweepX;
-      drawBars(on, r.conn, r.model, k => !falling(k) && !shown(k));   // noch nicht aufgedeckt oder trägt nichts
+      drawBars(on, r.conn, r.model, k => !falling(k) && !shown(k), r.pass);   // noch nicht aufgedeckt oder trägt nichts
       if (scale) {   // unverformte Lage
         ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = C.ink2; ctx.lineWidth = 1; ctx.beginPath();
         for (let k = 0; k < L.nB; k++) if (r.fe[k]) line([P(L.bars[k].p), P(L.bars[k].q)]);
@@ -912,18 +1097,18 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       pts.forEach((p, k) => {
         if (!p) return;
         strokeBar(p, bwOf(on[k]), colors ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel);
-        if (colors && r.util[k] > 1) {
+        if (colors && r.fail[k]) {
           strokeBar(p, bwOf(on[k]), `rgba(255,255,255,${pulse})`);
           if (r.fail[k] === 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
         }
       });
       ctx.restore();
-      drawNodes(pts.map((p, k) => p ? k : -1).filter(k => k >= 0), on, r.model, n => nodeXY(r, n, scale));
+      drawNodes(pts.map((p, k) => p ? k : -1).filter(k => k >= 0), on, r.model, n => nodeXY(r, n, scale), r.pass);
       if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) drawMax(r, pts[r.maxBar]);
     }
     if (v.loose) drawFalling(v.loose.set, v.loose.p, on, () => C.steel);
     else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
-    if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && r.reason !== 'mechanismus' ? bandOf(r.util[k]) : C.steel);
+    if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && !modeShape(r) ? bandOf(r.util[k]) : C.steel);
   }
   // Knicken: Stab seitlich ausgebaucht; Fließen: Riss quer über die Stabmitte
   function drawBuckle(p, w) {
@@ -961,7 +1146,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   }
   function drawMax(r, pts) {
     if (r.maxBar < 0 || !pts) return;
-    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
+    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${pct(r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
     ctx.save(); ctx.font = `600 ${Math.max(11, G.s * 0.2)}px ${MONO}`;
     const w = ctx.measureText(txt).width + 12, h = Math.max(18, G.s * 0.3);
     const lx = Math.min(Math.max(4, cx + G.s * 0.3), G.W - w - 4), ly = Math.min(Math.max(4, cy - G.s * 0.45 - h), G.H - h - 4);
@@ -1015,7 +1200,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // Lastpfeile (siehe loadGeom); sie wandern mit der Verformung. Gleiche Lasten bekommen eine gemeinsame Beschriftung.
   function drawLoads(v) {
-    const s = G.s, d = st.def, r = v.res && v.res.disp && (v.live || v.res.reason !== 'mechanismus') ? v.res : null;
+    const s = G.s, d = st.def, r = v.res && v.res.disp && (v.live || !modeShape(v.res)) ? v.res : null;
     const scale = r ? (v.scale || 0) * (v.defo == null ? 1 : v.defo) : 0, hl = s * 0.2, hw = s * 0.09;
     ctx.save(); ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent; ctx.lineWidth = Math.max(2, s * 0.04);
     ctx.font = `600 ${fontPx(s)}px ${MONO}`; ctx.textBaseline = 'middle';
@@ -1066,23 +1251,28 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function failWhy(r) {
     if (r.reason === 'lastpfad') return 'Die Last hat keine Verbindung zum Lager.';
     if (r.reason === 'mechanismus') return r.model === 'truss'
-      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck oder ein Knoten ohne Querstab gibt unter der Last nach (Mechanismus).'
+      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck, ein Knoten ohne Querstab oder ein Querstab, der selbst nicht gehalten ist, gibt nach (Mechanismus).'
       : 'Das Stabwerk ist beweglich, die Lagerung reicht nicht.';
+    if (r.reason === 'stabil') return 'Das Tragwerk ist instabil: Unter den Druckkräften weicht es als Ganzes seitlich aus, obwohl jeder Stab für sich hält' +
+      (Number.isFinite(r.lambda) ? ` (kritischer Lastfaktor etwa ${fmt(r.lambda, 2)}).` : '.');
     const parts = [];
     if (r.nYield) parts.push(r.nYield === 1 ? 'ein Stab fließt' : `${r.nYield} Stäbe fließen`);
     if (r.nBuckle) parts.push(r.nBuckle === 1 ? 'ein Druckstab knickt' : `${r.nBuckle} Druckstäbe knicken`);
     const t = parts.join(', ');
-    return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${fmt(100 * r.maxUtil)} %.`;
+    return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
-  const statusText = r => r.ok ? `max. Auslastung ${fmt(100 * r.maxUtil)} %, hält.` : failWhy(r);
+  const statusText = r => r.ok ? `max. Auslastung ${pct(r.maxUtil)} %, hält.` : failWhy(r);
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
   function showFem(r, scale, live) {
     let t = '';
+    const lam = Number.isFinite(r.lambda) ? `kritischer Lastfaktor ${r.lambda < 10 ? fmt(r.lambda, 2) : 'über 10'}` : '';
     if (live) t = !r.disp ? '' : r.reason === 'mechanismus' ? `Verformung live als ${NAME[r.model]}: Das Stabwerk gibt nach, es ist beweglich.`
+      : r.reason === 'stabil' ? `Verformung live als ${NAME[r.model]}: Das Tragwerk knickt als Ganzes aus.`
       : `Verformung live als ${NAME[r.model]}, ${overText(scale)}.`;
-    else if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Steifigkeitsmatrix nur mit den Hilfsfedern regulär, das Stabwerk ist beweglich.`;
+    else if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Es gibt eine Bewegung, bei der sich kein Stab dehnt; das Stabwerk ist beweglich.`;
+    else if (r.reason === 'stabil') t = `${NAME[r.model]}: Stabilitätsprüfung nicht bestanden${lam ? ', ' + lam : ''}. Gezeigt ist die Knickform.`;
     else if (r.disp) t = `${NAME[r.model]}: ${fmt(r.bars)} Stäbe, ${fmt(r.dofs)} Freiheitsgrade, gelöst in ${fmt(r.ms, 1)} ms` +
-      (scale ? `. Verformung ${overText(scale)}.` : '.');
+      (lam ? `, Stabilität: ${lam}` : '') + (scale ? `. Verformung ${overText(scale)}.` : '.');
     $('femline').textContent = t;
   }
   const legend = on => { $('legend').hidden = !on; };
@@ -1126,6 +1316,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   // Nach jeder Änderung im Entwurf
   function refresh() {
     st.conn = FEM.attached(st.L, st.on);
+    st.pass = new Uint8Array(st.L.nN);
+    for (const q of FEM.passNodes(st.L, FEM.carrying(st.L, st.conn)).keys()) st.pass[q] = 1;
     const loose = st.on.some((x, k) => x && !st.conn[k]);
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
     if (st.phase === 'design') {
@@ -1133,7 +1325,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
         const r = FEM.analyze(st.L, st.on, st.model), scale = st.liveDef ? liveScale(r) : 0, colors = st.liveUtil;
         st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
         showFem(r, scale, !colors);
-        legend(colors && r.disp && r.reason !== 'mechanismus');
+        legend(colors && r.disp && !modeShape(r));
         const what = colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
         $('verdict').innerHTML = `<p>${what}</p>${hint}`;
         if (plays() && !mp.sub) pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: r.ok ? 1 : 0 });   // Stand für den Beamer
@@ -1185,7 +1377,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     st.phase = 'probe';
     st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors: true };
     showFem(r, 0);
-    legend(r.disp && r.reason !== 'mechanismus');
+    legend(r.disp && !modeShape(r));
     $('verdict').innerHTML = `<p>Probe-Rechnung als ${NAME[st.model]}: ${statusText(r)} Die Farben verschwinden, sobald Sie weiterarbeiten.</p>`;
     panel(); controls(); render();
   }
@@ -1220,14 +1412,14 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // Deckt ein Ergebnis auf; full: mit Wisch von links (sonst gleich die Verformung). done läuft nach der Animation.
   function reveal(r, on, full, done) {
-    const L = st.L, stress = !!r.disp && r.reason !== 'mechanismus', mech = r.reason === 'mechanismus' && !!r.disp;
+    const L = st.L, stress = !!r.disp && !modeShape(r), mech = modeShape(r) && !!r.disp;
     st.busy = true;
     const loose = Uint8Array.from(on, (x, k) => x && !r.conn[k] ? 1 : 0);
     // Was beim Versagen abfällt: versagende Stäbe und alles, was dann nicht mehr am Lager hängt; beim Mechanismus alles Tragende
     let fall = null;
     if (stress && !r.ok) {
-      const keep = FEM.attached(L, Uint8Array.from(on, (x, k) => x && r.conn[k] && !(r.util[k] > 1) ? x : 0));
-      fall = Uint8Array.from(on, (x, k) => r.conn[k] && (!keep[k] || r.util[k] > 1) ? 1 : 0);
+      const keep = FEM.attached(L, Uint8Array.from(on, (x, k) => x && r.conn[k] && !r.fail[k] ? x : 0));
+      fall = Uint8Array.from(on, (x, k) => r.conn[k] && (!keep[k] || r.fail[k]) ? 1 : 0);
     } else if (mech) fall = Uint8Array.from(r.fe);
     let scale = 0;
     if (stress) scale = niceScale(r);
@@ -1262,16 +1454,16 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function verdict() {
     const m = st.model, r = st.res[m], o = st.res[other(m)], e = st.eso[esoKey()], mine = kg(st.on, r.conn);
     let h = r.ok
-      ? `<p><span class="t-ok">Hält als ${NAME[m]}.</span> Max. Auslastung ${fmt(100 * r.maxUtil)} %, Masse ${fmt(mine)} kg.</p>`
+      ? `<p><span class="t-ok">Hält als ${NAME[m]}.</span> Max. Auslastung ${pct(r.maxUtil)} %, Masse ${fmt(mine)} kg.</p>`
       : `<p><span class="t-bad">Versagt als ${NAME[m]}.</span> ${failWhy(r)} Es zählt nur, was hält.</p>`;
-    h += `<p>Als ${NAME[other(m)]} gerechnet: ${o.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${fmt(100 * o.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(o)}`}` +
+    h += `<p>Als ${NAME[other(m)]} gerechnet: ${o.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${pct(o.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(o)}`}` +
       ` Oben bei „Ansicht“ schalten Sie zwischen beiden um.</p>`;
     if (!e) h += '<p>Der Algorithmus rechnet noch …</p>';
     else if (e.res.ok) {
       const em = kg(e.on, e.res.conn);
       let cmp = '';
       if (r.ok) cmp = mine < em - 0.05 ? 'Algorithmus geschlagen!' : mine <= em + 0.05 ? 'Gleichstand mit dem Algorithmus.' : mine <= em * 1.1 ? 'Knapp dran.' : 'Da geht noch was.';
-      h += `<p>Algorithmus (als ${NAME[m]}): ${fmt(em)} kg, max. Auslastung ${fmt(100 * e.res.maxUtil)} %. ${cmp}</p>`;
+      h += `<p>Algorithmus (als ${NAME[m]}): ${fmt(em)} kg, max. Auslastung ${pct(e.res.maxUtil)} %. ${cmp}</p>`;
     }
     $('verdict').innerHTML = h;
   }
@@ -1313,9 +1505,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     e.inModel = e.inModel || {};
     const r = e.inModel[m] = e.inModel[m] || FEM.analyze(st.L, e.on, m);
     reveal(r, e.on, false, () => {
-      $('verdict').innerHTML = `<p>Lösung des Algorithmus, optimiert als ${NAME[st.model]}: ${fmt(kg(e.on, e.res.conn))} kg, ${count(e.on)} Stäbe ` +
+      $('verdict').innerHTML = `<p>Lösung des Algorithmus, optimiert als ${NAME[st.model]}: ${fmt(kg(e.on, e.res.conn))} kg, ${count(e.res.conn)} Stäbe ` +
         `(${profText(e.on)}). Er hat immer den am wenigsten ausgelasteten Stab entfernt und danach jedem Stab das kleinste Profil gegeben, das hält.</p>` +
-        `<p>Als ${NAME[m]} gerechnet: ${r.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${fmt(100 * r.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(r)}`}</p>`;
+        `<p>Als ${NAME[m]} gerechnet: ${r.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${pct(r.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(r)}`}</p>`;
     });
   }
   function toggleEso() {
@@ -1617,7 +1809,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     });
     mp.snap = list;
     Object.assign(mp.g, { ph: 'reveal', left: 0 });
-    const patch = { g: { ...mp.g }, res: list.map(e => [e.peer, e.name, Math.round(e.kg * 10), e.ok ? 1 : 0]), sc: scoreList() };
+    const patch = { g: { ...mp.g }, res: list.map(e => [e.peer, e.name, Math.round(e.kg * 10), e.ok ? 1 : 0]), rn: list.length, sc: scoreList() };
     // Presence ist auf 4 KiB begrenzt: bei sehr vielen Mitspielenden die Liste kürzen
     const size = o => new TextEncoder().encode(JSON.stringify(o)).length;
     while (patch.res.length && size({ ...myPres, ...patch }) > 3800) patch.res.pop();
@@ -1647,7 +1839,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const r = mp.own;
     if (r) {
       st.on = r.on.slice(); st.conn = r.conn;
-      const stress = r.disp && r.reason !== 'mechanismus';
+      const stress = r.disp && !modeShape(r);
       st.view = { mode: 'result', res: r, on: st.on, scale: stress ? niceScale(r) : 0, t: 0 };
       showFem(r, st.view.scale); legend(stress); stamp(r.ok);
     }
@@ -1662,7 +1854,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function leaveRoom(endGame) {
     clearInterval(mp.tick); clearTimeout(mp.revealTimer); mp.revealTimer = null; stopBoard();
     if (mp.role === 'host' && endGame) store.set('host', null);
-    if (mp.role) pres({ k: null, h: null, n: null, j: null, g: null, r: null, s: null, d: null, kg: null, ok: null, res: null, sc: null, p: null });
+    if (mp.role) pres({ k: null, h: null, n: null, j: null, g: null, r: null, s: null, d: null, kg: null, ok: null, res: null, rn: null, sc: null, p: null });
     Object.assign(mp, { role: null, code: '', rid: 0, sub: false, revealed: 0, own: null, snap: null, order: null, conflict: false, zoom: null, all: false });
     $('zoomhead').hidden = true;
     st.phase = 'design';
@@ -1691,7 +1883,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       if (!redraw && card.dataset.open === String(open)) continue;
       card.dataset.open = String(open);
       drawMini(card.querySelector('canvas'), e.on, open ? e.res : null);
-      card.querySelector('.vl').textContent = open ? `${fmt(e.kg)} kg, ${count(e.on)} Stäbe` : '';
+      card.querySelector('.vl').textContent = open ? `${fmt(e.kg, 1)} kg, ${count(e.res.conn)} Stäbe` : '';
       const vd = card.querySelector('.vd');
       vd.textContent = !open ? '' : e.ok ? 'Hält' : 'Hält nicht';
       vd.className = 'vd' + (!open ? '' : e.ok ? ' ok' : ' bad');
@@ -1751,7 +1943,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     for (const b of L.bars) { c.moveTo(...Q(b.p)); c.lineTo(...Q(b.q)); }
     c.stroke();
     c.lineCap = 'round';
-    const colors = r && r.disp && r.reason !== 'mechanismus';
+    const colors = r && r.disp && !modeShape(r);
     L.bars.forEach((b, k) => {
       if (!on[k] || (r && !r.conn[k])) return;
       c.strokeStyle = colors && r.fe[k] ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel;
@@ -1761,16 +1953,17 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   }
 
   // ---------- Wettkampf: Anzeige ----------
-  const esoKg = () => { const e = esoNow(); return e && e.res.ok ? kg(e.on, e.res.conn) : null; };
+  // auf 0,1 kg gerundet wie die Einträge der Mitspielenden, damit gleich schwere Entwürfe gleich gewertet werden
+  const esoKg = () => { const e = esoNow(); return e && e.res.ok ? Math.round(kg(e.on, e.res.conn) * 10) / 10 : null; };
   function rankHtml(list, me, ghostKg) {
     if (!list.length) return '<p>Keine Entwürfe eingegangen.</p>';
-    const ghost = () => `<li class="ghost"><span class="pl"></span><span class="nm">Algorithmus</span><span class="vl">${fmt(ghostKg)} kg</span></li>`;
+    const ghost = () => `<li class="ghost"><span class="pl"></span><span class="nm">Algorithmus</span><span class="vl">${fmt(ghostKg, 1)} kg</span></li>`;
     const rows = [], pl = places(list);
     let ghostDone = ghostKg == null;
     list.forEach((e, i) => {
       if (!ghostDone && (!e.ok || e.kg > ghostKg)) { rows.push(ghost()); ghostDone = true; }
       rows.push(`<li class="${e.ok ? '' : 'out'}${me && e.peer === me ? ' me' : ''}"><span class="pl">${pl[i]}.</span>` +
-        `<span class="nm">${esc(e.name)}</span><span class="vl">${e.ok ? fmt(e.kg) + ' kg' : 'hält nicht'}</span></li>`);
+        `<span class="nm">${esc(e.name)}</span><span class="vl">${e.ok ? fmt(e.kg, 1) + ' kg' : 'hält nicht'}</span></li>`);
     });
     if (!ghostDone) rows.push(ghost());
     return `<ol class="rank">${rows.join('')}</ol>`;
@@ -1978,9 +2171,12 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       const me = myPeer(), i = res.findIndex(e => e.peer === me), r = mp.own;
       let t = 'Rechnet …';
       if (r) {
-        t = r.ok ? `<span class="t-ok">Hält.</span> Ihr Tragwerk wiegt ${fmt(kg(r.on, r.conn))} kg.`
+        t = r.ok ? `<span class="t-ok">Hält.</span> Ihr Tragwerk wiegt ${fmt(Math.round(kg(r.on, r.conn) * 10) / 10, 1)} kg.`
           : `<span class="t-bad">Hält nicht.</span> ${failWhy(r)}`;
-        t += i >= 0 ? ` Platz ${places(res)[i]} von ${res.length}.` : res.length ? ' Ihr Entwurf kam nicht rechtzeitig an und wird nicht gewertet.' : '';
+        const rn = Number(h && h.presence.rn) || res.length;   // so viele Entwürfe hat die Spielleitung gewertet
+        t += i >= 0 ? ` Platz ${places(res)[i]} von ${rn}.` : !res.length ? ''
+          : rn > res.length ? ` Die Rangliste zeigt nur die ersten ${res.length} von ${rn} Plätzen, gewertet sind alle.`
+          : ' Ihr Entwurf kam nicht rechtzeitig an und wird nicht gewertet.';
       }
       set('mp-result', `<p>${t}</p>`);
       $('mp-all-btn').disabled = !r || !res.length;   // erst nach dem eigenen Aufdecken
@@ -2014,7 +2210,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       const w = st.busy ? ' wait' : '';   // Urteil erst nach der Animation
       const other = mp.zm !== st.model ? `, als ${NAME[mp.zm]} gerechnet` : '';
       set('zoomhead', `<span class="nm">${esc(e.name)}</span> <span class="${r.ok ? 't-ok' : 't-bad'}${w}">${r.ok ? 'Hält' : 'Hält nicht'}${other}</span>` +
-        `<span class="zs">${fmt(e.kg)} kg.<span class="${w}"> ${r.ok ? `Max. Auslastung ${fmt(100 * r.maxUtil)} %.` : failWhy(r)}</span></span>`);
+        `<span class="zs">${fmt(e.kg, 1)} kg.<span class="${w}"> ${r.ok ? `Max. Auslastung ${pct(r.maxUtil)} %.` : failWhy(r)}</span></span>`);
       set('mp-zoom', `Entwurf ${mp.zoom + 1} von ${mp.order.length}. Pfeiltasten blättern, Esc zeigt wieder alle.`);
       $('mp-zt').setAttribute('aria-pressed', String(mp.zm === 'truss'));
       $('mp-zf').setAttribute('aria-pressed', String(mp.zm === 'frame'));
@@ -2068,21 +2264,28 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     }
     return [(x - G.ox) / G.s, (G.oy - y) / G.s];
   }
+  // Zeiger auf der Zeichenfläche in Pixeln
+  const canvasPt = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // Stab unter dem Zeiger, gemessen an der gezeichneten Lage (bei Live-Verformung verschoben); tol in Rasterfeldern.
+  // Liegen zwei fast gleich nah, etwa in der Feldmitte, wo sich die Diagonalen kreuzen, gewinnt ein vorhandener Stab.
   function barNear([x, y], tol) {
-    let best = -1, bd = tol;
-    st.L.bars.forEach((b, k) => {
-      const [x0, y0] = b.p, dx = b.q[0] - x0, dy = b.q[1] - y0, t = clamp01(((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy));
-      const dd = Math.hypot(x - x0 - t * dx, y - y0 - t * dy);
-      if (dd < bd) { bd = dd; best = k; }
+    const tp = tol * G.s, d = st.L.bars.map(b => {
+      const [x0, y0] = onScreen(b.p), [x1, y1] = onScreen(b.q), dx = x1 - x0, dy = y1 - y0;
+      const t = clamp01(((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy || 1));
+      return Math.hypot(x - x0 - t * dx, y - y0 - t * dy);
     });
-    return best;
+    let best = -1;
+    d.forEach((v, k) => { if (v < tp && (best < 0 || v < d[best])) best = k; });
+    if (best < 0 || st.on[best]) return best;
+    let alt = -1;
+    d.forEach((v, k) => { if (st.on[k] && v < tp && v < d[best] + 0.06 * G.s && (alt < 0 || v < d[alt])) alt = k; });
+    return alt >= 0 ? alt : best;
   }
-  // Knoten unter dem Zeiger (nah genug an einem Rasterknoten, der zum Bauteil gehört), sonst -1
+  // Knoten unter dem Zeiger (an der gezeichneten Lage), sonst -1
   function nodeNear([x, y], tol) {
-    const i = Math.round(x), j = Math.round(y);
-    if (Math.hypot(x - i, y - j) > tol || i < 0 || j < 0 || i > st.def.nx || j > st.def.ny) return -1;
-    const n = st.L.id(i, j);
-    return st.L.ij[n] ? n : -1;
+    let best = -1, bd = tol * G.s;
+    st.L.ij.forEach((q, n) => { if (!q) return; const [sx, sy] = onScreen(q), d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = n; } });
+    return best;
   }
   const touch = e => e.pointerType === 'touch';
   const erases = k => st.on[k] === st.prof;
@@ -2112,17 +2315,17 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   cv.addEventListener('pointerdown', e => {
     if (!editable() || !G) return;
-    const p = gridPt(e);
+    const p = gridPt(e), c = canvasPt(e);
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
-    st.drag = { p0: p, p1: p, x0: e.clientX, y0: e.clientY, moved: false, k0: barNear(p, touch(e) ? 0.3 : 0.2), atNode: nodeNear(p, touch(e) ? 0.22 : 0.18) >= 0 };
+    st.drag = { p0: p, p1: p, x0: e.clientX, y0: e.clientY, moved: false, k0: barNear(c, touch(e) ? 0.3 : 0.2), atNode: nodeNear(c, touch(e) ? 0.22 : 0.18) >= 0 };
     st.hover = null;
   });
   cv.addEventListener('pointermove', e => {
     if (!G) return;
     const p = gridPt(e), d = st.drag;
     if (!d) {
-      if (e.pointerType === 'mouse' && editable()) { const h = hoverAt(p); if (!sameHover(h, st.hover)) { st.hover = h; render(); } }
+      if (e.pointerType === 'mouse' && editable()) { const h = hoverAt(canvasPt(e)); if (!sameHover(h, st.hover)) { st.hover = h; render(); } }
       return;
     }
     d.p1 = p;
@@ -2142,7 +2345,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const erase = erases(d.k0);
     if (erase && st.L.frozen[d.k0]) { lockedMsg(); return; }
     if (apply([d.k0], erase)) refresh();
-    if (e.pointerType === 'mouse') { st.hover = hoverAt(gridPt(e)); render(); }
+    if (e.pointerType === 'mouse') { st.hover = hoverAt(canvasPt(e)); render(); }
   });
   cv.addEventListener('pointercancel', () => { st.drag = null; render(); });
   cv.addEventListener('pointerleave', () => { if (st.hover) { st.hover = null; render(); } });

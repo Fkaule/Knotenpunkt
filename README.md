@@ -38,13 +38,13 @@ Dann http://localhost:8913/ öffnen. `npm test` prüft den FE-Kern, `node script
 
 ## Wie gerechnet wird
 
-Raster 1 m, Stäbe aus Quadratrohr, Stahl S235, $`E = 210\ \text{GPa}`$ (scharfkantig gerechnet):
+Raster 1 m, Stäbe aus Quadratrohr nach EN 10219-2 (Eckradien außen 2t, innen t), Stahl S235, $`E = 210\ \text{GPa}`$:
 
 | Profil | A in mm² | I in cm⁴ | W in cm³ | Masse in kg/m |
 |---|---|---|---|---|
-| 40 × 40 × 3 | 444 | 10,2 | 5,1 | 3,5 |
-| 60 × 60 × 4 | 896 | 47,1 | 15,7 | 7,0 |
-| 80 × 80 × 5 | 1500 | 141,3 | 35,3 | 11,8 |
+| 40 × 40 × 3 | 420,8 | 9,32 | 4,66 | 3,30 |
+| 60 × 60 × 4 | 854,8 | 43,55 | 14,52 | 6,71 |
+| 80 × 80 × 5 | 1435,6 | 131,44 | 32,86 | 11,27 |
 
 Jedes Rasterfeld hat vier Randstäbe und zwei Diagonalen (kreuzend, ohne Knoten in der Mitte).
 
@@ -62,13 +62,25 @@ K_l = \begin{bmatrix} a & 0 & 0 & -a & 0 & 0 \\ 0 & k_1 & k_2 & 0 & -k_1 & k_2 \
 
 Lösung mit Band-Cholesky, Knoten entlang der kurzen Seite nummeriert.
 
-**Beweglich oder nicht:** An jedem freien Freiheitsgrad sitzt eine sehr weiche Feder ($`10^{-11}\,EA/a`$ bzw. $`10^{-11}\,EI/a`$ des kleinsten Profils). Sie hält die Matrix regulär. Nehmen die Federn mehr als 1 % der Arbeit der Last auf, ist das Stabwerk ein Mechanismus:
+**Beweglich oder nicht:** An jedem freien Freiheitsgrad sitzt eine sehr weiche Feder ($`10^{-11}\,EA/a`$ bzw. $`10^{-11}\,EI/a`$ des kleinsten Profils). Sie hält die Matrix regulär. Geprüft wird zweimal:
+
+1. Regt die Last eine Bewegung an, nehmen die Federn einen spürbaren Teil ihrer Arbeit auf:
 
 ```math
 \frac{\sum k_s u_i^2}{f^\mathsf{T} u} > 0{,}01
 ```
 
-So stören unbelastete, lose Teile nicht, und ein gerader Stabzug über einen Knoten ohne Querstab ist nur dann beweglich, wenn die Last quer dazu angreift.
+2. Unabhängig von der Last (Kinematik): Die Steifigkeitsmatrix ohne Last wird zerlegt; ein Pivot unter $`10^{-8}\,EA/a`$ heißt, es gibt eine Bewegung, die keinen Stab dehnt (im Rahmen auch keinen biegt). Im Fachwerk sind dabei die Durchlaufstellen quer gehalten, ihr Ausweichen deckt das Knicken des Stabzugs ab. Ein Querstab, der selbst nicht gehalten ist, hält nichts: Das Stabwerk ist beweglich.
+
+Gezeigt wird dann die Bewegungsform (inverse Iteration auf der zerlegten Matrix).
+
+**Stabilität des Ganzen:** Halten alle Stäbe für sich, wird die Matrix aus elastischer und geometrischer Steifigkeit zerlegt, mit den Normalkräften der linearen Lösung (Fachwerk: $`N/L`$ quer zum Stab; Rahmen: konsistente geometrische Steifigkeit des kubischen Ansatzes). Ist sie nicht positiv definit, weicht das Tragwerk unter den Druckkräften als Ganzes aus: instabil (etwa Seitwärtsknicken eines Rahmens ohne Diagonale, freie Kragstütze nach Euler-Fall 1, Druckstab an einem Querstab ohne Halt). Der kritische Lastfaktor $`\lambda`$ kommt aus
+
+```math
+\left(K + K_{G,\text{Zug}}\right)\varphi = \lambda\left(-K_{G,\text{Druck}}\right)\varphi
+```
+
+per inverser Iteration; die Knickform wird gezeigt.
 
 **Nachweis je Stab:** Auslastung ist das Größere aus Fließen und Knicken,
 
@@ -76,27 +88,36 @@ So stören unbelastete, lose Teile nicht, und ein gerader Stabzug über einen Kn
 \eta = \max\left(\frac{|N|/A + \max(|M_1|, |M_2|)/W}{235\ \text{MPa}},\ \frac{-N}{\pi^2 EI / L_k^2}\right)
 ```
 
-mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: der gerade Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt (Euler-Fall 2). Hält, wenn $`\eta \le 1`$ in allen Stäben.
+mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer zum Stab hält (Euler-Fall 2); ob dieser Knoten wirklich hält, prüft die Stabilität des Ganzen. Hält, wenn $`\eta \le 1`$ in allen Stäben.
 
-**Durchlaufende Stäbe:** Wo ein Stab ohne Querstab gerade weiterläuft (ohne Lager und Last), ist kein Knoten: Der Stabzug ist ein durchlaufendes Profil, wie ein Gurt, auch im Fachwerk. Gerechnet wird er weiter aus 1-m-Elementen; da dort keine Querkraft angreift, tragen sie nur Normalkraft, und geknickt wird über die ganze Länge. In der Zeichnung steht dort kein Gelenk.
+**Durchlaufende Stäbe:** Wo ein Stab ohne Querstab gerade weiterläuft und kein Lager quer hält, ist kein Knoten: Der Stabzug ist ein durchlaufendes Profil, wie ein Gurt, auch im Fachwerk. Gerechnet wird er weiter aus 1-m-Elementen; da dort keine Querkraft angreift, tragen sie nur Normalkraft, und geknickt wird über die ganze Länge. In der Zeichnung steht dort kein Gelenk, und im Fachwerk wird die Querverschiebung dieser Stellen fürs Zeichnen linear zwischen den Enden des Stabzugs eingesetzt. Greift dort eine Last quer an, ist das Fachwerk beweglich.
 
-**Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden (Knoten ohne Lager, Last und weiteren Stab) und Teile ohne Last tragen nichts und werden nicht gerechnet, zählen aber bei der Masse.
+**Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Teile, die nur über einen einzigen Knoten am Rest hängen und weder Lager noch Last enthalten, tragen nichts (am einzigen Anschluss kann keine Kraft wirken), dazu zählen lose Enden; ebenso Teile ohne Verbindung zu einer Last. Sie werden nicht gerechnet, zählen aber bei der Masse.
 
-**Gegner:** beginnt mit dem vollen Raster im mittleren Profil und bemisst es (fully stressed design: jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält; wiederholt, bis sich nichts mehr ändert, weil sich die Kräfte mit den Steifigkeiten umlagern). Dann entfernt er immer den am geringsten ausgelasteten Stab, bemisst neu und behält das Ergebnis, wenn es hält und leichter ist. Was beim Entfernen beweglich wird oder nicht mehr hält, versucht er nicht noch einmal.
+**Gegner:** beginnt mit dem vollen Raster im mittleren Profil und bemisst es (fully stressed design: jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält; wiederholt, bis sich nichts mehr ändert, weil sich die Kräfte mit den Steifigkeiten umlagern; ist das Ganze instabil, werden die Druckstäbe vergrößert). Dann entfernt er immer den am geringsten ausgelasteten Stab, bemisst neu und behält das Ergebnis, wenn es hält und leichter ist. Was beim Entfernen beweglich wird oder nicht mehr hält, versucht er nicht noch einmal. Weil der Weg vom Start abhängt, rechnet er vier Läufe (eigenes Modell, anderes Modell mit Neubemessung, zwei mit zufällig gestörter Reihenfolge), nimmt den leichtesten und versucht zum Schluss je Stab ein Profil kleiner.
 
-**Lasten:** Brücke 9 × 34 kN, Kragarm 90 kN, Kran 38 kN, so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu gut 50 % ausgelastet ist. Tor 5 kN Wind: Stützen und Riegel allein halten als Rahmen erst im dicksten Profil (106 kg), mit einer Diagonale schon im dünnsten (46 kg).
+**Lasten:** Brücke 9 × 34 kN, Kragarm 90 kN, Kran 38 kN, so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu gut 50 % ausgelastet ist. Tor 4,5 kN Wind: Stützen und Riegel allein halten als Rahmen erst im dicksten Profil (89 %, 101 kg); mit einer durchgehenden Diagonale von Ecke zu Ecke (drei Stäbe) im dünnsten Profil halten sie in beiden Modellen (44 kg).
 
 ## Verifikation (`npm test`)
 
 - Kragbalken aus vier Rahmenstäben: Durchbiegung $`FL^3/(3EI)`$ und Einspannmoment $`FL`$; als Fachwerk beweglich
 - Zweistab: Stabkräfte aus dem Knotengleichgewicht, Auslastung aus Fließen und Knicken; Zugstab nur Fließen
 - Feld ohne Diagonale: als Fachwerk beweglich, als Rahmen tragfähig, Kopfverschiebung zwischen eingespanntem und gelenkigem Riegel
-- Lose Enden und abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab
+- Lose Enden und abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab, im Rahmen wie im Fachwerk
+- Loses Dreieck am Mittelknoten eines Druckstabs hält nichts, der Stab knickt über die ganze Länge
+- Sprosse zwischen zwei Druckketten ohne Diagonale: im Fachwerk beweglich
+- Kragstütze mit freiem Kopf: im Rahmen instabil ab der Knicklast nach Euler-Fall 1 (kritischer Lastfaktor auf 2 % genau), im Fachwerk beweglich
+- Zweigelenkrahmen unter Vertikallast: Seitwärtsknicken, obwohl jeder Stab für sich hält
+- Last direkt auf dem Lager ist kein Mechanismus; eine Lagerung, die die Last zufällig nicht anregt, ist trotzdem beweglich
 - Profile: Auslastung und Masse je Profil; Bemessen wählt das kleinste Profil, das hält
 - Algorithmus: Ergebnis hält in beiden Modellen und ist deutlich leichter als das volle Raster
+
+Unabhängig geprüft (05.10.2026, drei getrennte Prüfungen mit eigenen Referenzlösern): Elementmatrizen, Band-Cholesky, Schnittgrößen und Gleichgewicht bis 1e-8, Darstellung der Biegelinie gegen die analytische Lösung; die Befunde dieser Prüfung (Scheinaussteifung, nicht angeregte Mechanismen, Seitwärtsknicken, Querschnittswerte) sind eingearbeitet.
 
 ## Was das Spiel vereinfacht
 
 - Linear, elastisch, kleine Verformungen; „Bruch“ heißt: ein Stab erreicht am Rand die Streckgrenze
-- Knicken nur je Stabzug nach Euler, ohne Imperfektionen und ohne Knicken des ganzen Rahmens; im Rahmen auf der sicheren Seite
+- Knicken nach Euler ohne Imperfektionen; die Knickkurven nach EN 1993-1-1 sind bis etwa Faktor 1,8 strenger
+- Stabilität des Ganzen mit einem Element je Stab: für einzelne Stäbe etwas zu günstig, dort gilt der Euler-Nachweis
+- Nur in der Ebene: kein Knicken aus der Ebene, kein Biegedrillknicken; keine Begrenzung der Verformung
 - Knoten als Punkte, Lasten nur in Knoten, kein Eigengewicht

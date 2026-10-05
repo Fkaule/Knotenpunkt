@@ -81,6 +81,71 @@ test("Knicklänge läuft über Knoten ohne Querstab hinweg, im Rahmen wie im Fac
   near(FEM.analyze(L, chain, "truss").util[L.barAt(1, 0, 2, 0)], F / FEM.ncr(P1, 3 * FEM.GRID), 1e-6, "Knick-Auslastung Fachwerk");
 });
 
+test("Prüfbefund: loses Dreieck am Mittelknoten eines Druckstabs hält nichts, der Stab knickt über die ganze Länge", () => {
+  const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 },
+    { kind: "los", nodes: [[2, 0]], side: "right", fix: 2 }], loads: [{ node: [2, 0], fx: -80000, fy: 0 }] });
+  const on = only(L, [[0, 0, 1, 0], [1, 0, 2, 0], [1, 0, 1, 1], [1, 1, 2, 1], [1, 0, 2, 1]]);
+  for (const model of ["truss", "frame"]) {
+    const r = FEM.analyze(L, on, model);
+    assert.strictEqual(r.fe[L.barAt(1, 0, 1, 1)], 0, `${model}: Dreieck trägt nicht`);
+    assert.strictEqual(r.Lk[L.barAt(0, 0, 1, 0)], 2 * FEM.GRID, `${model}: Knicklänge über beide Stäbe`);
+    assert.strictEqual(r.reason, "knicken", model);
+  }
+});
+
+test("Prüfbefund: Sprosse zwischen zwei Druckketten hält im Fachwerk nichts (beweglich)", () => {
+  const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0], [0, 1]], side: "left", fix: 3 },
+    { kind: "los", nodes: [[2, 0], [2, 1]], side: "right", fix: 2 }],
+    loads: [{ node: [2, 0], fx: -10000, fy: 0 }, { node: [2, 1], fx: -10000, fy: 0 }] });
+  const on = only(L, [[0, 0, 1, 0], [1, 0, 2, 0], [0, 1, 1, 1], [1, 1, 2, 1], [1, 0, 1, 1]]);
+  assert.strictEqual(FEM.analyze(L, on, "truss").reason, "mechanismus");
+  // mit einer Diagonale im ersten Feld sind die Mittelknoten gehalten
+  on[L.barAt(0, 0, 1, 1)] = 1;
+  assert.ok(FEM.analyze(L, on, "truss").ok);
+});
+
+test("Kragstütze mit freiem Kopf: Rahmen knickt nach Euler-Fall 1 (Stabilität), Fachwerk ist beweglich", () => {
+  const L = FEM.level({ nx: 1, ny: 3, supports: [{ kind: "wand", nodes: [[0, 0]], side: "bottom", fix: 7 }],
+    loads: [{ node: [0, 3], fx: 0, fy: -1 }] });
+  const col = only(L, [[0, 0, 0, 1], [0, 1, 0, 2], [0, 2, 0, 3]]), h = 3 * FEM.GRID;
+  const Ncr1 = Math.PI ** 2 * FEM.E * P1.I / (4 * h * h);
+  const at = F => { const d = JSON.parse(JSON.stringify(L.def)); d.loads[0].fy = -F; const Lf = FEM.level(d); return FEM.analyze(Lf, col, "frame"); };
+  assert.ok(at(0.9 * Ncr1).ok, "unter der Knicklast hält sie");
+  const r = at(1.1 * Ncr1);
+  assert.strictEqual(r.reason, "stabil");
+  near(r.lambda, 1 / 1.1, 0.02, "kritischer Lastfaktor");
+  assert.strictEqual(FEM.analyze(L, col, "truss").reason, "mechanismus");
+});
+
+test("Zweigelenkrahmen unter Vertikallast knickt seitwärts (Stabilität), obwohl jeder Stab für sich hält", () => {
+  const mk = F => FEM.level({ nx: 3, ny: 3, supports: [{ kind: "fest", nodes: [[0, 0], [3, 0]], side: "bottom", fix: 3 }],
+    loads: [{ node: [0, 3], fx: 0, fy: -F }, { node: [3, 3], fx: 0, fy: -F }] });
+  const portal = L => { const on = new Uint8Array(L.nB);
+    for (let j = 0; j < 3; j++) { on[L.barAt(0, j, 0, j + 1)] = 1; on[L.barAt(3, j, 3, j + 1)] = 1; }
+    for (let i = 0; i < 3; i++) on[L.barAt(i, 3, i + 1, 3)] = 3;
+    return on; };
+  const weak = FEM.analyze(mk(2000), portal(mk(2000)), "frame");
+  assert.ok(weak.ok, "kleine Last hält");
+  assert.ok(weak.lambda > 1, "Lastfaktor über 1");
+  const big = FEM.analyze(mk(8000), portal(mk(8000)), "frame");
+  assert.ok(big.util.every(u => u < 1), "jeder Stab für sich hält");
+  assert.strictEqual(big.reason, "stabil");
+});
+
+test("Last direkt auf dem Lager ist kein Mechanismus", () => {
+  const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "bottom", fix: 3 },
+    { kind: "los", nodes: [[2, 0]], side: "bottom", fix: 2 }], loads: [{ node: [2, 0], fx: 0, fy: -1000 }] });
+  const r = FEM.analyze(L, only(L, [[0, 0, 1, 1], [1, 1, 2, 0], [0, 0, 1, 0], [1, 0, 2, 0]]), "truss");
+  assert.ok(r.ok, r.reason);
+});
+
+test("Lagerung, die die Last zufällig nicht anregt, ist trotzdem beweglich", () => {
+  const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "los", nodes: [[0, 0], [2, 0]], side: "bottom", fix: 2 }],
+    loads: [{ node: [1, 1], fx: 0, fy: -1000 }] });
+  const on = only(L, [[0, 0, 1, 1], [1, 1, 2, 0], [0, 0, 1, 0], [1, 0, 2, 0]]);
+  for (const model of ["truss", "frame"]) assert.strictEqual(FEM.analyze(L, on, model).reason, "mechanismus", model);
+});
+
 test("Größeres Profil: steifer, weniger ausgelastet, schwerer", () => {
   const L = FEM.level({ nx: 4, ny: 1, supports: [{ kind: "wand", nodes: [[0, 0], [0, 1]], side: "left", fix: 7 }],
     loads: [{ node: [4, 0], fx: 0, fy: -F }] });
@@ -117,7 +182,8 @@ test("Algorithmus entfernt Stäbe, bemisst die Profile und das Ergebnis hält", 
     let s;
     do s = g.next(); while (!s.done);
     const e = s.value;
-    assert.ok(e.res.ok && e.order.length > 10, `${model}: ${e.order.length} Stäbe entfernt`);
+    const removed = L.nB - e.on.filter(Boolean).length;
+    assert.ok(e.res.ok && removed > 10, `${model}: ${removed} Stäbe entfernt`);
     assert.ok(FEM.analyze(L, e.on, model).ok);
     assert.ok(FEM.mass(L, e.on) < FEM.mass(L, Uint8Array.from(L.domain, () => 2)) / 2, `${model}: deutlich leichter als das volle Raster`);
   }
