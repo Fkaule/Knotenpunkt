@@ -7,7 +7,9 @@ Dasselbe Stabwerk lässt sich auf zwei Arten rechnen, im Ergebnis schalten Sie z
 - **Fachwerk:** Knoten sind Gelenke, Stäbe tragen nur Normalkraft. Ohne Dreiecke ist es beweglich.
 - **Rahmen:** Knoten sind biegesteif, Stäbe sind Balken. Felder ohne Diagonale tragen über Biegung, aber weich; in Fachwerken zeigt diese Ansicht die Nebenspannungen.
 
-## Starten
+Spielen: https://fkaule.github.io/Knotenpunkt/
+
+## Lokal starten
 
 ```bash
 npm run build
