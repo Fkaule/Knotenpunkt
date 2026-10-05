@@ -1,17 +1,13 @@
 {
-  "name": "knackpunkt",
-  "version": "0.12.1",
+  "name": "knotenpunkt",
+  "version": "0.1.0",
   "private": true,
-  "description": "FEM-Minispiel: Material entfernen, bis das Bauteil versagt, allein oder als Wettkampf",
+  "description": "Stabwerk-Minispiel: Stäbe weglassen, bis das Tragwerk versagt, gerechnet als Fachwerk oder als Rahmen",
   "scripts": {
     "build": "node build.mjs",
-    "start": "node server.mjs",
     "test": "node --test"
   },
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "ws": "^8.18.0"
   }
 }
