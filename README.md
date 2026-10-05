@@ -15,7 +15,7 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - Antippen setzt einen Stab oder nimmt ihn weg; mit einem anderen Profil gewählt bekommt der Stab dieses Profil.
 - Drei Profile (Tasten 1 bis 3). Gesperrte Stäbe (Fahrbahn, Stützen und Riegel des Tors) bleiben, ihr Profil ist wählbar.
 - „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
-- Live beim Zeichnen: aus, Verformung (fester Maßstab je Bauteil, ein weicher Entwurf hängt sichtbar mehr durch) oder Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
+- Live beim Zeichnen, einzeln oder zusammen: Verformung (fester Maßstab je Bauteil: das volle Raster im mittleren Profil verschiebt sich um 0,3 % der größten Abmessung, ein weicher Entwurf entsprechend mehr, sanft begrenzt auf 5 %) und Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
 
 ## Lokal starten
 

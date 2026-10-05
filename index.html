@@ -171,9 +171,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <div class="model" role="group" aria-label="Beim Zeichnen live zeigen">
           <span>Live</span>
           <span class="tools">
-            <button type="button" id="lv-aus" aria-pressed="false">Aus</button>
-            <button type="button" id="lv-verformung" aria-pressed="true" title="Verformung beim Zeichnen, fester Maßstab je Bauteil">Verformung</button>
-            <button type="button" id="lv-auslastung" aria-pressed="false" title="Übungsmodus: Verformung und Auslastung beim Zeichnen">Auslastung</button>
+            <button type="button" id="lv-def" aria-pressed="true" title="Verformung beim Zeichnen, fester Maßstab je Bauteil">Verformung</button>
+            <button type="button" id="lv-util" aria-pressed="false" title="Übungsmodus: Auslastung beim Zeichnen">Auslastung</button>
           </span>
         </div>
 
@@ -575,7 +574,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   };
   const NAME = { truss: 'Fachwerk', frame: 'Rahmen' };
   const other = m => m === 'truss' ? 'frame' : 'truss';
-  const LIVE = ['aus', 'verformung', 'auslastung'];
+  // Verformung in der Zeichnung, bezogen auf die größte Abmessung des Bauteils: Aufdecken (Ergebnis), live beim Zeichnen
+  // (so weit verschiebt sich das volle Raster im mittleren Profil) und Obergrenze live, sanft angelaufen
+  const DEFO_RESULT = 0.035, DEFO_LIVE = 0.003, DEFO_LIVE_MAX = 0.05;
 
   // Farbskala ohne Gelb: blau, türkis, grün, orange, rot; über 100 % magenta
   const STOPS = [[0, [38, 60, 150]], [0.2, [44, 110, 214]], [0.4, [24, 164, 196]], [0.6, [52, 178, 116]],
@@ -592,10 +593,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   const bandOf = u => u > 1 ? OVER : BANDS[Math.min(9, Math.floor(Math.max(0, u) * 10))];
 
   // on: je Stab 0 (kein Stab) oder Profil 1 bis 3. model: Rechenmodell, das gewertet wird; shown: Modell in der
-  // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; live: was beim Zeichnen zu sehen ist
+  // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; liveDef, liveUtil: beim Zeichnen
+  // Verformung und Auslastung zeigen (einzeln oder zusammen)
   const st = { li: 0, def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
     model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' },
-    prof: 1, live: LIVE.includes(store.get('live')) ? store.get('live') : 'verformung', liveRef: {},
+    prof: 1, liveDef: store.get('live-def') !== false, liveUtil: store.get('live-util') === true, liveRef: {},
     hover: null, drag: null, eso: {}, esoRun: null, animId: 0, busy: false };
   let G = null;
   const C = {};
@@ -693,21 +695,22 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     return out;
   }
   const maxDisp = r => { let m = 0; for (let n = 0; n < st.L.nN; n++) m = Math.max(m, Math.hypot(r.disp[n * 3], r.disp[n * 3 + 1])); return m; };
+  const size = () => Math.max(st.def.nx, st.def.ny) * GRID;   // größte Abmessung des Bauteils in mm
   function niceScale(r) {
     const m = maxDisp(r);
     if (!m) return 0;
-    const raw = 0.35 * GRID / m, p = 10 ** Math.floor(Math.log10(raw));
+    const raw = DEFO_RESULT * size() / m, p = 10 ** Math.floor(Math.log10(raw));
     if (raw < 1) return raw;
     return [5, 3, 2, 1.5, 1].map(f => f * p).find(x => x <= raw);
   }
-  // Live-Verformung: fester Maßstab je Bauteil und Modell (das volle Raster im mittleren Profil verschiebt sich um
-  // 0,04 Rasterfelder), damit ein weicher Entwurf sichtbar mehr nachgibt; höchstens 0,5 Rasterfelder
+  // Live-Verformung: fester Maßstab je Bauteil und Modell, damit ein weicher Entwurf sichtbar mehr nachgibt (siehe DEFO_LIVE);
+  // sehr weiche und bewegliche Entwürfe laufen sanft gegen die Obergrenze DEFO_LIVE_MAX
   function liveScale(r) {
     if (!r.disp) return 0;
-    const key = st.li + '-' + r.model;
-    if (!st.liveRef[key]) st.liveRef[key] = 0.04 * GRID / maxDisp(FEM.analyze(st.L, Uint8Array.from(st.L.domain, () => 2), r.model));
+    const key = st.li + '-' + r.model, cap = DEFO_LIVE_MAX * size();
+    if (!st.liveRef[key]) st.liveRef[key] = DEFO_LIVE * size() / maxDisp(FEM.analyze(st.L, Uint8Array.from(st.L.domain, () => 2), r.model));
     const m = maxDisp(r);
-    return m * st.liveRef[key] > 0.5 * GRID ? 0.5 * GRID / m : st.liveRef[key];
+    return m ? cap * Math.tanh(m * st.liveRef[key] / cap) / m : st.liveRef[key];
   }
   const mid = k => { const b = st.L.bars[k]; return [(b.p[0] + b.q[0]) / 2, (b.p[1] + b.q[1]) / 2]; };
 
@@ -1015,14 +1018,14 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     $('act-result').hidden = design;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
-      $('b-probe').disabled = !st.probes || st.live === 'auslastung';
+      $('b-probe').disabled = !st.probes || st.liveUtil;
       $('b-undo').disabled = !st.undo.length;
       $('b-eso').disabled = !esoNow();
     }
     $('b-probe').textContent = `Probe-Rechnung (${st.probes})`;
     $('b-eso').textContent = st.phase === 'eso' ? 'Mein Ergebnis' : 'Lösung des Algorithmus';
     for (const p of [1, 2, 3]) { const b = $('pr-' + p); b.setAttribute('aria-pressed', String(st.prof === p)); b.disabled = !design || st.busy; }
-    for (const m of LIVE) { const b = $('lv-' + m); b.setAttribute('aria-pressed', String(st.live === m)); b.disabled = !design || st.busy; }
+    for (const [id, on] of [['lv-def', st.liveDef], ['lv-util', st.liveUtil]]) { $(id).setAttribute('aria-pressed', String(on)); $(id).disabled = !design || st.busy; }
     // im Entwurf: welches Modell gewertet wird; nach dem Abgeben: welches Modell gezeigt wird
     const m = design ? st.model : st.shown;
     $('model-label').textContent = design ? 'Rechnen als' : 'Ansicht';
@@ -1038,8 +1041,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const loose = st.on.some((x, k) => x && !st.conn[k]);
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
     if (st.phase === 'design') {
-      if (st.live !== 'aus') {
-        const r = FEM.analyze(st.L, st.on, st.model), scale = liveScale(r), colors = st.live === 'auslastung';
+      if (st.liveDef || st.liveUtil) {
+        const r = FEM.analyze(st.L, st.on, st.model), scale = st.liveDef ? liveScale(r) : 0, colors = st.liveUtil;
         st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
         showFem(r, scale, !colors);
         legend(colors && r.disp && r.reason !== 'mechanismus');
@@ -1083,7 +1086,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function probe() {
     if (!st.probes || !editable()) return;
     st.probes--;
-    const r = FEM.analyze(st.L, st.on, st.model), scale = liveScale(r);
+    const r = FEM.analyze(st.L, st.on, st.model), scale = st.liveDef ? liveScale(r) : 0;
     st.phase = 'probe';
     st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors: true };
     showFem(r, 0);
@@ -1193,9 +1196,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     if (st.phase === 'eso') return showEso();
     reveal(st.res[m], st.on, false, () => verdict());
   }
-  function setLive(m) {
-    if (!editable() || m === st.live) return;
-    st.live = m; store.set('live', m);
+  // Live-Ansicht: Verformung und Auslastung schalten unabhängig voneinander
+  function toggleLive(what) {
+    if (!editable()) return;
+    if (what === 'def') { st.liveDef = !st.liveDef; store.set('live-def', st.liveDef); }
+    else { st.liveUtil = !st.liveUtil; store.set('live-util', st.liveUtil); }
     st.phase = 'design';
     refresh();
   }
@@ -1336,7 +1341,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   });
 
   for (const p of [1, 2, 3]) $('pr-' + p).onclick = () => setProf(p);
-  for (const m of LIVE) $('lv-' + m).onclick = () => setLive(m);
+  $('lv-def').onclick = () => toggleLive('def');
+  $('lv-util').onclick = () => toggleLive('util');
   $('g-truss').onclick = () => setModel('truss');
   $('g-frame').onclick = () => setModel('frame');
   $('b-submit').onclick = submit;
