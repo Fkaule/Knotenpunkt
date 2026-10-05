@@ -66,7 +66,7 @@ test("Lose Enden und abgetrennte Stäbe tragen nicht, Fachwerk wird dadurch nich
   assert.strictEqual(FEM.analyze(L, only(L, [[0, 1, 1, 1]]), "frame").reason, "lastpfad");
 });
 
-test("Knicklänge läuft über Knoten ohne Querstab hinweg", () => {
+test("Knicklänge läuft über Knoten ohne Querstab hinweg, im Rahmen wie im Fachwerk", () => {
   const L = FEM.level({ nx: 3, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 }],
     loads: [{ node: [3, 0], fx: -F, fy: 0 }] });
   const chain = only(L, [[0, 0, 1, 0], [1, 0, 2, 0], [2, 0, 3, 0]]);
@@ -77,33 +77,8 @@ test("Knicklänge läuft über Knoten ohne Querstab hinweg", () => {
   // ungestützte 3 m: Knicken maßgebend
   const r = FEM.analyze(L, chain, "frame");
   near(r.util[L.barAt(1, 0, 2, 0)], F / FEM.ncr(P1, 3 * FEM.GRID), 1e-6, "Knick-Auslastung");
-});
-
-test("Fachwerk: Druck über ein Gelenk ohne Querstab knickt aus, Zug nicht; gesperrte Stäbe laufen durch", () => {
-  const chain = [[0, 0, 1, 0], [1, 0, 2, 0], [2, 0, 3, 0]];
-  for (const [fx, ok] of [[-F, false], [F, true]]) {
-    const L = FEM.level({ nx: 3, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 }],
-      loads: [{ node: [3, 0], fx, fy: 0 }] });
-    const r = FEM.analyze(L, only(L, chain), "truss");
-    assert.strictEqual(r.ok, ok, fx < 0 ? "Druck" : "Zug");
-    if (!ok) { assert.strictEqual(r.fail[L.barAt(1, 0, 2, 0)], 3); assert.strictEqual(r.nHinge, 3); }
-    assert.ok(FEM.analyze(L, only(L, chain), "frame").ok, "als Rahmen trägt der steife Knoten durch");
-  }
-  // gesperrter Stabzug: ein durchlaufendes Profil, Knicklänge über alle drei Felder
-  const L = FEM.level({ nx: 3, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 }],
-    loads: [{ node: [3, 0], fx: -F, fy: 0 }], frozen: chain });
-  const r = FEM.analyze(L, only(L, chain), "truss");
-  assert.ok(r.ok);
-  assert.strictEqual(r.Lk[L.barAt(1, 0, 2, 0)], 3 * FEM.GRID);
-});
-
-test("Tor: Zugdiagonale hält als Fachwerk, Druckdiagonale knickt an ihren Zwischenknoten aus", () => {
-  const LEVELS = require("../src/levels.js"), L = FEM.level(LEVELS[0]);
-  const withDiag = list => { const on = Uint8Array.from(L.frozen); for (const b of list) on[L.barAt(...b)] = 1; return on; };
-  assert.ok(FEM.analyze(L, withDiag([[0, 0, 1, 1], [1, 1, 2, 2], [2, 2, 3, 3]]), "truss").ok);
-  const r = FEM.analyze(L, withDiag([[0, 3, 1, 2], [1, 2, 2, 1], [2, 1, 3, 0]]), "truss");
-  assert.ok(!r.ok && r.nHinge === 3);
-  assert.ok(FEM.analyze(L, withDiag([[0, 3, 1, 2], [1, 2, 2, 1], [2, 1, 3, 0]]), "frame").ok);
+  // auch im Fachwerk: der gerade Stabzug läuft durch, kein Gelenk an den Zwischenknoten
+  near(FEM.analyze(L, chain, "truss").util[L.barAt(1, 0, 2, 0)], F / FEM.ncr(P1, 3 * FEM.GRID), 1e-6, "Knick-Auslastung Fachwerk");
 });
 
 test("Größeres Profil: steifer, weniger ausgelastet, schwerer", () => {

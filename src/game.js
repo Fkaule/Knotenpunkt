@@ -205,8 +205,8 @@
     for (const k of list) strokeBar([P(st.L.bars[k].p), P(st.L.bars[k].q)], Math.max(2, bwOf(on[k]) * 0.6), C.loose);
     ctx.restore();
   }
-  // Knotensymbol so groß wie der dickste Stab am Knoten. Wo ein gesperrter Stab ohne Querstab gerade weiterläuft, ist
-  // kein Knoten (er läuft als ein Profil durch), dort steht kein Symbol.
+  // Knotensymbol so groß wie der dickste Stab am Knoten. Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten:
+  // Er läuft als ein Profil durch (Knicklänge über den ganzen Zug), dort steht kein Symbol. Lager und Lastpunkte bleiben Knoten.
   function drawNodes(bars, on, model, pos) {
     const L = st.L, size = new Map(), at = new Map();
     for (const k of bars) for (const n of [L.bars[k].a, L.bars[k].b]) {
@@ -214,8 +214,10 @@
       at.set(n, (at.get(n) || []).concat(k));
     }
     const through = n => {
-      const ks = at.get(n), [p, q] = ks.map(k => L.bars[k]);
-      return ks.length === 2 && ks.every(k => L.frozen[k]) && !L.fix[n] && !L.loadNodes.includes(n) && Math.abs(p.c * q.s - p.s * q.c) < 1e-9;
+      const ks = at.get(n);
+      if (ks.length !== 2 || L.fix[n] || L.loadNodes.includes(n)) return false;
+      const [p, q] = ks.map(k => L.bars[k]);
+      return Math.abs(p.c * q.s - p.s * q.c) < 1e-9;
     };
     ctx.save(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.ink;
     for (const [n, w] of size) {
@@ -282,7 +284,7 @@
         strokeBar(p, bwOf(on[k]), colors ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel);
         if (colors && r.util[k] > 1) {
           strokeBar(p, bwOf(on[k]), `rgba(255,255,255,${pulse})`);
-          if (r.fail[k] >= 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
+          if (r.fail[k] === 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
         }
       });
       ctx.restore();
@@ -329,8 +331,7 @@
   }
   function drawMax(r, pts) {
     if (r.maxBar < 0 || !pts) return;
-    const [cx, cy] = pts[Math.floor(pts.length / 2)];
-    const txt = r.fail[r.maxBar] === 3 ? 'Gelenk knickt aus' : `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
+    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
     ctx.save(); ctx.font = `600 ${Math.max(11, G.s * 0.2)}px ${MONO}`;
     const w = ctx.measureText(txt).width + 12, h = Math.max(18, G.s * 0.3);
     const lx = Math.min(Math.max(4, cx + G.s * 0.3), G.W - w - 4), ly = Math.min(Math.max(4, cy - G.s * 0.45 - h), G.H - h - 4);
@@ -342,7 +343,7 @@
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
-  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1] >= 2;
+  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1];
 
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
@@ -440,10 +441,8 @@
     const parts = [];
     if (r.nYield) parts.push(r.nYield === 1 ? 'ein Stab fließt' : `${r.nYield} Stäbe fließen`);
     if (r.nBuckle) parts.push(r.nBuckle === 1 ? 'ein Druckstab knickt' : `${r.nBuckle} Druckstäbe knicken`);
-    if (r.nHinge) parts.push(r.nHinge === 1 ? 'ein Druckstab läuft über ein Gelenk ohne Querstab, das seitlich ausknickt'
-      : `${r.nHinge} Druckstäbe laufen über Gelenke ohne Querstab, die seitlich ausknicken`);
     const t = parts.join(', ');
-    return `${t[0].toUpperCase() + t.slice(1)}${Number.isFinite(r.maxUtil) ? `, max. Auslastung ${fmt(100 * r.maxUtil)} %` : ''}.`;
+    return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${fmt(100 * r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${fmt(100 * r.maxUtil)} %, hält.` : failWhy(r);
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';

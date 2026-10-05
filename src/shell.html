@@ -253,7 +253,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, braucht dafür aber dicke Profile.</li>
             <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst. Ob das Stabwerk beweglich ist, zeigen sehr weiche Hilfsfedern an jedem Knoten: Nehmen sie einen spürbaren Teil der Arbeit der Last auf, ist es ein Mechanismus.</li>
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager sitzt.</li>
-            <li>Im Fachwerk ist jeder Knoten ein Gelenk: Läuft ein Druckstab über einen Knoten ohne Querstab, hat der Knoten keinen seitlichen Halt und knickt aus (Ausnahmefall). Unter Zug hält so ein Knoten. Im Rahmen trägt der steife Knoten durch. Vorgegebene, gesperrte Stäbe laufen als ein Profil durch.</li>
+            <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden tragen nichts, zählen aber bei der Masse.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird.</li>
           </ul>

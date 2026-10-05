@@ -253,7 +253,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li><b>Rahmen:</b> Die Knoten sind biegesteif (Quadrate), die Stäbe sind Balken nach Euler-Bernoulli mit Normalkraft, Querkraft und Biegemoment. Ein Feld ohne Diagonale trägt über Biegung, braucht dafür aber dicke Profile.</li>
             <li>Die Steifigkeitsmatrix wird bei jeder Rechnung neu aufgebaut und gelöst. Ob das Stabwerk beweglich ist, zeigen sehr weiche Hilfsfedern an jedem Knoten: Nehmen sie einen spürbaren Teil der Arbeit der Last auf, ist es ein Mechanismus.</li>
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager sitzt.</li>
-            <li>Im Fachwerk ist jeder Knoten ein Gelenk: Läuft ein Druckstab über einen Knoten ohne Querstab, hat der Knoten keinen seitlichen Halt und knickt aus (Ausnahmefall). Unter Zug hält so ein Knoten. Im Rahmen trägt der steife Knoten durch. Vorgegebene, gesperrte Stäbe laufen als ein Profil durch.</li>
+            <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden tragen nichts, zählen aber bei der Masse.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird.</li>
           </ul>
@@ -290,12 +290,10 @@ const FEM = (() => {
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
   // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken.
-  // Lk = Infinity: Der Druckstab läuft über ein Gelenk ohne seitlichen Halt und knickt dort aus, schon bei kleiner Kraft
-  // (unter 1 N gilt als kraftlos). Ergebnis [Auslastung, Art: 1 Fließen, 2 Knicken, 3 Gelenk knickt aus]
+  // Ergebnis [Auslastung, knickt]
   function barUtil(p, N, M, Lk) {
-    const uy = (Math.abs(N) / p.A + M / p.W) / RE;
-    const uk = N >= 0 ? 0 : Number.isFinite(Lk) ? -N / ncr(p, Lk) : N < -1 ? Infinity : 0;
-    return [Math.max(uy, uk), uk === Infinity ? 3 : uk > uy ? 2 : 1];
+    const uy = (Math.abs(N) / p.A + M / p.W) / RE, uk = N < 0 ? -N / ncr(p, Lk) : 0;
+    return [Math.max(uy, uk), uk > uy];
   }
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
   // nehmen sie einen nennenswerten Teil der Arbeit der Last auf, ist das Stabwerk beweglich (Mechanismus).
@@ -377,11 +375,8 @@ const FEM = (() => {
     return reach(L, fe, L.loadNodes);
   }
 
-  // Knicklänge: gerader Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt (Rahmen: der
-  // steife Knoten trägt durch). Im Fachwerk ist jeder Knoten ein Gelenk: Läuft der Stab über einen Knoten ohne Querstab, hat
-  // dieser keinen seitlichen Halt (Ausnahmefall), unter Druck knickt er dort aus; Ergebnis Infinity. Vorgegebene, gesperrte
-  // Stäbe laufen als ein Profil durch (Fahrbahn, Stützen und Riegel des Tors).
-  function bucklingLength(L, fe, k, model = 'frame') {
+  // Knicklänge: gerader Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt
+  function bucklingLength(L, fe, k) {
     let len = 0;
     for (const start of [L.bars[k].a, L.bars[k].b]) {
       let n = start, cur = k;
@@ -390,7 +385,6 @@ const FEM = (() => {
         if (L.fix[n] || here.length !== 1) break;
         const o = here[0], bo = L.bars[o], bc = L.bars[cur];
         if (Math.abs(bo.c * bc.s - bo.s * bc.c) > 1e-9) break;   // nicht in einer Linie
-        if (model === 'truss' && !(L.frozen[o] && L.frozen[cur])) return Infinity;
         len += bo.len; cur = o; n = bo.a === n ? bo.b : bo.a;
       }
     }
@@ -488,7 +482,7 @@ const FEM = (() => {
     if (!(work > 0) || spring > MECH * work) { res.reason = 'mechanismus'; res.ms = performance.now() - t0; return res; }
 
     // Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler)
-    let nY = 0, nK = 0, nH = 0;
+    let nY = 0, nK = 0;
     for (const el of els) {
       const { k, b, p } = el, u = el.dof.map((q, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
       let N, M1 = 0, M2 = 0;
@@ -500,14 +494,14 @@ const FEM = (() => {
         M1 = dv + EI / Lb * (4 * ul[2] + 2 * ul[5]);
         M2 = dv + EI / Lb * (2 * ul[2] + 4 * ul[5]);
       }
-      const Lk = bucklingLength(L, fe, k, model), [util, kind] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      const Lk = bucklingLength(L, fe, k), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
       res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.Lk[k] = Lk; res.util[k] = util;
-      if (util > 1) { res.fail[k] = kind; if (kind === 3) nH++; else if (kind === 2) nK++; else nY++; }
+      if (util > 1) { res.fail[k] = knickt ? 2 : 1; if (knickt) nK++; else nY++; }
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.ok = res.maxUtil <= 1;
-    res.reason = res.ok ? '' : res.fail[res.maxBar] >= 2 ? 'knicken' : 'spannung';
-    res.nYield = nY; res.nBuckle = nK; res.nHinge = nH;
+    res.reason = res.ok ? '' : res.fail[res.maxBar] === 2 ? 'knicken' : 'spannung';
+    res.nYield = nY; res.nBuckle = nK;
     res.ms = performance.now() - t0;
     return res;
   }
@@ -841,8 +835,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     for (const k of list) strokeBar([P(st.L.bars[k].p), P(st.L.bars[k].q)], Math.max(2, bwOf(on[k]) * 0.6), C.loose);
     ctx.restore();
   }
-  // Knotensymbol so groß wie der dickste Stab am Knoten. Wo ein gesperrter Stab ohne Querstab gerade weiterläuft, ist
-  // kein Knoten (er läuft als ein Profil durch), dort steht kein Symbol.
+  // Knotensymbol so groß wie der dickste Stab am Knoten. Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten:
+  // Er läuft als ein Profil durch (Knicklänge über den ganzen Zug), dort steht kein Symbol. Lager und Lastpunkte bleiben Knoten.
   function drawNodes(bars, on, model, pos) {
     const L = st.L, size = new Map(), at = new Map();
     for (const k of bars) for (const n of [L.bars[k].a, L.bars[k].b]) {
@@ -850,8 +844,10 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       at.set(n, (at.get(n) || []).concat(k));
     }
     const through = n => {
-      const ks = at.get(n), [p, q] = ks.map(k => L.bars[k]);
-      return ks.length === 2 && ks.every(k => L.frozen[k]) && !L.fix[n] && !L.loadNodes.includes(n) && Math.abs(p.c * q.s - p.s * q.c) < 1e-9;
+      const ks = at.get(n);
+      if (ks.length !== 2 || L.fix[n] || L.loadNodes.includes(n)) return false;
+      const [p, q] = ks.map(k => L.bars[k]);
+      return Math.abs(p.c * q.s - p.s * q.c) < 1e-9;
     };
     ctx.save(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.ink;
     for (const [n, w] of size) {
@@ -918,7 +914,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
         strokeBar(p, bwOf(on[k]), colors ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel);
         if (colors && r.util[k] > 1) {
           strokeBar(p, bwOf(on[k]), `rgba(255,255,255,${pulse})`);
-          if (r.fail[k] >= 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
+          if (r.fail[k] === 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
         }
       });
       ctx.restore();
@@ -965,8 +961,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   }
   function drawMax(r, pts) {
     if (r.maxBar < 0 || !pts) return;
-    const [cx, cy] = pts[Math.floor(pts.length / 2)];
-    const txt = r.fail[r.maxBar] === 3 ? 'Gelenk knickt aus' : `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
+    const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${fmt(100 * r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
     ctx.save(); ctx.font = `600 ${Math.max(11, G.s * 0.2)}px ${MONO}`;
     const w = ctx.measureText(txt).width + 12, h = Math.max(18, G.s * 0.3);
     const lx = Math.min(Math.max(4, cx + G.s * 0.3), G.W - w - 4), ly = Math.min(Math.max(4, cy - G.s * 0.45 - h), G.H - h - 4);
@@ -978,7 +973,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
-  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1] >= 2;
+  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1];
 
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
@@ -1076,10 +1071,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const parts = [];
     if (r.nYield) parts.push(r.nYield === 1 ? 'ein Stab fließt' : `${r.nYield} Stäbe fließen`);
     if (r.nBuckle) parts.push(r.nBuckle === 1 ? 'ein Druckstab knickt' : `${r.nBuckle} Druckstäbe knicken`);
-    if (r.nHinge) parts.push(r.nHinge === 1 ? 'ein Druckstab läuft über ein Gelenk ohne Querstab, das seitlich ausknickt'
-      : `${r.nHinge} Druckstäbe laufen über Gelenke ohne Querstab, die seitlich ausknicken`);
     const t = parts.join(', ');
-    return `${t[0].toUpperCase() + t.slice(1)}${Number.isFinite(r.maxUtil) ? `, max. Auslastung ${fmt(100 * r.maxUtil)} %` : ''}.`;
+    return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${fmt(100 * r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${fmt(100 * r.maxUtil)} %, hält.` : failWhy(r);
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
