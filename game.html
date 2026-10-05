@@ -708,6 +708,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     return m ? cap * Math.tanh(m * st.liveRef[key] / cap) / m : st.liveRef[key];
   }
   const mid = k => { const b = st.L.bars[k]; return [(b.p[0] + b.q[0]) / 2, (b.p[1] + b.q[1]) / 2]; };
+  // Wo ein Rasterpunkt gerade zu sehen ist: bei Live-Verformung verschoben (Knoten ohne Stab bleiben im Raster)
+  const liveDefo = () => st.view.live && st.view.scale && st.view.res.disp;
+  const onScreen = q => { const n = st.L.id(...q); return liveDefo() && st.L.ij[n] ? nodeXY(st.view.res, n, st.view.scale) : P(q); };
 
   // ---------- Zeichnen ----------
   function render() {
@@ -774,10 +777,10 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     if (!h || st.drag || !editable()) return;
     ctx.save(); ctx.lineCap = 'round';
     if (h.node != null) {
-      const [x, y] = P(st.L.ij[h.node]);
+      const [x, y] = onScreen(st.L.ij[h.node]);
       ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, Math.max(7, G.s * 0.12), 0, 7); ctx.stroke();
     } else {
-      const b = st.L.bars[h.k], pts = [P(b.p), P(b.q)];
+      const b = st.L.bars[h.k], pts = [onScreen(b.p), onScreen(b.q)];
       if (h.erase) { ctx.setLineDash([5, 4]); strokeBar(pts, bwOf(st.on[h.k]) + 2, C.bad); }
       else { if (!st.on[h.k]) ctx.setLineDash([6, 5]); ctx.globalAlpha = 0.85; strokeBar(pts, bwOf(st.prof), C.accent); }
     }
@@ -788,11 +791,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const { a, b, bars, erase } = lineBars(st.drag);
     ctx.save(); ctx.lineCap = 'round';
     for (const k of bars) {
-      const q = st.L.bars[k], pts = [P(q.p), P(q.q)];
+      const q = st.L.bars[k], pts = [onScreen(q.p), onScreen(q.q)];
       if (erase) { strokeBar(pts, bwOf(st.on[k]) + 2.5, C.sheet); ctx.setLineDash([5, 4]); strokeBar(pts, 2, C.bad); ctx.setLineDash([]); }
       else { ctx.globalAlpha = 0.85; strokeBar(pts, bwOf(st.prof), C.accent); ctx.globalAlpha = 1; }
     }
-    ctx.setLineDash([6, 4]); strokeBar([P(a), P(b)], 1.5, C.accent);
+    ctx.setLineDash([6, 4]); strokeBar([onScreen(a), onScreen(b)], 1.5, C.accent);
     ctx.restore();
   }
 
@@ -1250,7 +1253,21 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   // Ziehen von Knoten zu Knoten zeichnet eine Linie (waagrecht, senkrecht oder unter 45°). Liegt am Anfang der Linie schon
   // ein Stab im gewählten Profil, nimmt der Zug die Stäbe entlang der Linie weg, sonst bekommen sie das gewählte Profil.
   // Antippen wirkt genauso auf einen einzelnen Stab.
-  const gridPt = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left - G.ox) / G.s, (G.oy - e.clientY + b.top) / G.s]; };
+  // Zeiger in Rasterkoordinaten. Bei Live-Verformung zählt, wo man die Stäbe sieht: Die Verschiebung des nächsten
+  // sichtbaren Knotens wird abgezogen, das kehrt die Verformung in seiner Umgebung um.
+  function gridPt(e) {
+    const r = cv.getBoundingClientRect();
+    let x = e.clientX - r.left, y = e.clientY - r.top;
+    if (liveDefo()) {
+      let best = Infinity, off = [0, 0];
+      for (const q of st.L.ij) if (q) {
+        const [sx, sy] = onScreen(q), d = Math.hypot(sx - x, sy - y);
+        if (d < best) { const [gx, gy] = P(q); best = d; off = [sx - gx, sy - gy]; }
+      }
+      x -= off[0]; y -= off[1];
+    }
+    return [(x - G.ox) / G.s, (G.oy - y) / G.s];
+  }
   function barNear([x, y], tol) {
     let best = -1, bd = tol;
     st.L.bars.forEach((b, k) => {

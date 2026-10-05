@@ -13,6 +13,7 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 
 - Ziehen von Knoten zu Knoten zeichnet eine Linie aus Stäben (waagrecht, senkrecht, unter 45°) im gewählten Profil. Beginnt der Zug auf einem Stab, der schon in diesem Profil daliegt, nimmt er die Stäbe entlang der Linie weg.
 - Antippen setzt einen Stab oder nimmt ihn weg; mit einem anderen Profil gewählt bekommt der Stab dieses Profil.
+- Bei Live-Verformung zählt die sichtbare Lage: Gezogen und angetippt wird an den verformt gezeichneten Knoten und Stäben.
 - Drei Profile (Tasten 1 bis 3). Gesperrte Stäbe (Fahrbahn, Stützen und Riegel des Tors) bleiben, ihr Profil ist wählbar.
 - „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
 - Live beim Zeichnen, einzeln oder zusammen: Verformung (fester Maßstab je Bauteil: das volle Raster im mittleren Profil verschiebt sich um 0,3 % der größten Abmessung, ein weicher Entwurf entsprechend mehr, sanft begrenzt auf 5 %) und Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
