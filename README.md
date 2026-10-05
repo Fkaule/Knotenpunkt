@@ -18,6 +18,15 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
 - Live beim Zeichnen, einzeln oder zusammen: Verformung (fester Maßstab je Bauteil: das volle Raster im mittleren Profil verschiebt sich um 0,3 % der größten Abmessung, ein weicher Entwurf entsprechend mehr, sanft begrenzt auf 5 %) und Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
 
+## Wettkampf
+
+- Läuft über einen eigenen Spielserver (`server.mjs`, Node und ws), der nur den Status aller Geräte verteilt (Presence); gerechnet wird in den Browsern. Auf GitHub Pages gibt es keinen Spielserver, dort ist der Wettkampf gesperrt.
+- Die Spielleitung eröffnet einen Raum mit vierstelligem Code (Link mit `#CODE`), wählt Bauteil, Rechenmodell (Fachwerk oder Rahmen) und Zeit (3 bis 10 Minuten) und kann selbst mitspielen.
+- Keine Probe-Rechnungen: Verformung und Auslastung sind die ganze Runde live zu sehen. Der Beamer zeigt dabei je Person die Masse des aktuellen Entwurfs, grün, wenn er gerade hält.
+- Auflösung: Entwürfe nacheinander aufdecken, der leichteste zuletzt; große Ansicht je Entwurf, umschaltbar zwischen Fachwerk und Rahmen; der Algorithmus als Geisterzeile.
+- Punkte nach Platz je Runde: Von n Entwürfen, die halten, bekommt der leichteste n Punkte, der schwerste 1; wer versagt, 0. Die Gesamtwertung zählt über alle Runden.
+- Server: `npm start` (Port aus `PORT`, Standard 8080). Docker-Deploy: `KNOTENPUNKT_HOST=<ssh-name> scripts/deploy.sh` baut das Image auf dem Server und startet den Container `knotenpunkt` auf 127.0.0.1:8909; bricht ab, wenn gerade eine Runde läuft. nginx bindet ihn über `deploy/nginx-knotenpunkt-location.conf` unter `/knotenpunkt/` ein.
+
 ## Lokal starten
 
 ```bash

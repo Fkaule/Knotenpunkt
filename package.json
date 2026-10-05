@@ -2,12 +2,16 @@
   "name": "knotenpunkt",
   "version": "0.2.0",
   "private": true,
-  "description": "Stabwerk-Minispiel: ein Tragwerk aus Stäben bauen, so leicht wie möglich, gerechnet als Fachwerk oder als Rahmen",
+  "description": "Stabwerk-Minispiel: ein Tragwerk aus Stäben bauen, so leicht wie möglich, gerechnet als Fachwerk oder als Rahmen, allein oder als Wettkampf",
   "scripts": {
     "build": "node build.mjs",
+    "start": "node server.mjs",
     "test": "node --test"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }

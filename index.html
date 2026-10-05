@@ -49,7 +49,7 @@ body { background: var(--paper); color: var(--ink); font: 15px/1.45 var(--f-body
 @media (max-width: 880px) { .stage { grid-template-columns: minmax(0, 1fr); } }
 .sheet { background: var(--sheet); border: 2px solid var(--ink); outline: 1px solid var(--ink); outline-offset: 4px;
   margin: 5px; padding: 14px 14px 12px; min-width: 0; }
-#drawing { display: grid; gap: 8px; min-width: 0; }
+#drawing, .board { display: grid; gap: 8px; min-width: 0; }
 .sheet-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
 .howto { margin: 0; color: var(--ink2); font-size: 14px; max-width: 72ch; }
 .howto b { color: var(--ink); font-weight: 600; }
@@ -66,6 +66,9 @@ canvas.grabbing { cursor: grabbing; }
 .stamp.bad { color: var(--bad); }
 .stamp.hit { animation: stamp 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
 @keyframes stamp { from { transform: rotate(-8deg) scale(2.3); opacity: 0; } to { transform: rotate(-8deg) scale(1); opacity: 0.9; } }
+.timer { position: absolute; top: 6px; left: 6px; pointer-events: none; font: 600 clamp(22px, 3.4vw, 36px)/1 var(--f-mono);
+  padding: 6px 10px; border: 2px solid var(--ink); background: var(--sheet); color: var(--ink); font-variant-numeric: tabular-nums; }
+.timer.low { color: var(--bad); border-color: var(--bad); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font: 12px/1.2 var(--f-mono); color: var(--ink2); }
 .legend ol { display: flex; list-style: none; margin: 0; padding: 0; }
 .legend li { display: grid; justify-items: start; gap: 3px; min-width: 0; }
@@ -95,6 +98,68 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 .rules { font-size: 14px; color: var(--ink2); }
 .rules summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 .rules ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+/* Mehrspieler */
+.mp-box { display: grid; gap: 10px; font-size: 14.5px; }
+.mp-box h3 { margin: 6px 0 0; font: 700 13px var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+.mp-box p { margin: 0; }
+.mp-net { font-size: 13px; color: var(--ink2); }
+.mp-net.on::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+.mp-warn { color: var(--bad); font-weight: 600; }
+.field { display: grid; gap: 4px; font-size: 13px; color: var(--ink2); }
+.field input, .field select { font: 500 16px var(--f-body); padding: 8px 10px; border: 2px solid var(--ink); background: var(--sheet);
+  color: var(--ink); border-radius: 2px; min-width: 0; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.board h2 { margin: 0; font: 800 clamp(26px, 3.4vw, 38px)/1 var(--f-display); letter-spacing: 0.03em; text-transform: uppercase; text-wrap: balance; }
+.board p { margin: 0; max-width: 70ch; }
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 64ch; }
+.bigcode { font: 800 clamp(72px, 14vw, 150px)/0.9 var(--f-display); letter-spacing: 0.14em; }
+.joinurl { font: 500 15px var(--f-mono); color: var(--accent); overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.chips li { border: 1.5px solid var(--rule); padding: 4px 10px; font-weight: 600; }
+.chips li.done { border-color: var(--ok); color: var(--ok); }
+.chips .pd { display: inline-block; width: 9px; height: 9px; margin-left: 5px; border: 1.5px solid currentColor; border-radius: 50%; vertical-align: 0; }
+.chips .pd.on { background: currentColor; }
+.mp-note { font-size: 13px; color: var(--ink2); }
+.cards { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 600px) { .cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+.card { position: relative; display: grid; gap: 4px; padding: 8px; border: 1.5px solid var(--rule); background: var(--sheet); min-width: 0; }
+.card .pic { position: relative; container-type: inline-size; }
+.card canvas { width: 100%; cursor: inherit; touch-action: auto; }
+.card .cap { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; font-size: clamp(14px, 1.4vw, 18px); }
+.card .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.card .vd { font-weight: 700; white-space: nowrap; transition: opacity 0.25s; }
+.card .vd.late { opacity: 0; }
+.card .vd.ok { color: var(--ok); }
+.card .vd.bad { color: var(--bad); }
+.card .vl { font: 500 13px var(--f-mono); color: var(--ink2); min-height: 1.3em; }
+/* Aufdecken: der Stempel schlägt auf die Karte und wandert klein in die Zeile darunter (--dx, --dy setzt das Spiel) */
+.cstamp { position: absolute; left: 50%; top: 50%; pointer-events: none; white-space: nowrap;
+  font: 800 28px/1 var(--f-display); font-size: clamp(14px, 10cqw, 52px); letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.12em 0.35em 0.05em; border: 0.1em solid currentColor; border-radius: 6px; background: var(--sheet);
+  animation: cstamp 1.4s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
+.cstamp.ok { color: var(--ok); }
+.cstamp.bad { color: var(--bad); }
+@keyframes cstamp {
+  0% { transform: translate(-50%, -50%) rotate(-8deg) scale(2.3); opacity: 0; }
+  20% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 0.95; }
+  62% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 0.95; animation-timing-function: ease-in; }
+  100% { transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) rotate(0deg) scale(0.35); opacity: 0; }
+}
+.cards.all .card { cursor: zoom-in; }
+.cards.all .card:hover { border-color: var(--ink); }
+.zoomhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font: 800 clamp(24px, 3vw, 34px)/1.1 var(--f-display); letter-spacing: 0.02em; }
+.zoomhead .zs { font: 500 clamp(14px, 1.5vw, 18px) var(--f-body); color: var(--ink2); letter-spacing: 0; }
+.zoomhead .wait { visibility: hidden; }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; }
+.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-variant-numeric: tabular-nums; }
+.rank li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.rank .pl { color: var(--ink2); text-align: right; }
+.rank .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .vl { font-family: var(--f-mono); }
+.rank li.me { font-weight: 700; }
+.rank li.ghost { color: var(--ink2); font-style: italic; }
+.rank li.out .vl { color: var(--bad); }
+.board .rank { font-size: clamp(15px, 1.7vw, 21px); }
 @media (prefers-reduced-motion: reduce) { .stamp.hit { animation: none; } }
 @media (max-width: 480px) { .sheet { padding: 10px 8px 8px; } }
 </style>
@@ -104,12 +169,19 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
   <header class="top">
     <h1 class="brand">Knotenpunkt</h1>
     <p class="claim">Wie leicht geht es? Bauen Sie ein Tragwerk aus Stäben und rechnen Sie es als Fachwerk mit Gelenken oder als Rahmen mit steifen Knoten.</p>
-    <nav class="levels" id="levels" aria-label="Bauteil wählen"></nav>
+    <div class="nav">
+      <nav class="modes" aria-label="Spielart">
+        <button type="button" id="m-solo" aria-pressed="true">Allein üben</button>
+        <button type="button" id="m-mp" aria-pressed="false">Mehrspieler</button>
+      </nav>
+      <nav class="levels" id="levels" aria-label="Bauteil wählen"></nav>
+    </div>
   </header>
 
   <main class="stage">
     <section class="sheet" aria-label="Zeichnung">
       <div id="drawing">
+        <div class="zoomhead" id="zoomhead" hidden></div>
         <div class="sheet-head">
           <p class="howto" id="howto"><b>Ziehen</b> Sie von Knoten zu Knoten, waagrecht, senkrecht oder unter 45°: Die Linie wird zu Stäben im gewählten Profil.
             Beginnt der Zug auf einem Stab, der schon in diesem Profil daliegt, nimmt er die Stäbe entlang der Linie weg.
@@ -124,10 +196,12 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <div class="canvas-wrap" id="wrap">
           <canvas id="cv" aria-label="Stabwerk im Raster: von Knoten zu Knoten ziehen, um Stäbe zu zeichnen, antippen, um einen Stab zu setzen oder wegzunehmen"></canvas>
           <div class="stamp" id="stamp" hidden></div>
+          <div class="timer" id="timer" hidden></div>
         </div>
         <div class="legend" id="legend" hidden></div>
         <p class="femline" id="femline"></p>
       </div>
+      <div class="board" id="mp-board" hidden></div>
     </section>
 
     <aside class="side">
@@ -145,7 +219,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         </tbody>
       </table>
 
-      <div class="side">
+      <div id="solo-ui" class="side">
         <div class="model" role="group" aria-label="Rechenmodell">
           <span id="model-label">Rechnen als</span>
           <span class="tools">
@@ -199,6 +273,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           </ul>
         </details>
       </div>
+
+      <div id="mp-ui" class="mp-box" aria-live="polite" hidden></div>
     </aside>
   </main>
 </div>
@@ -661,16 +737,17 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     return { m, dim: [d.dim[0] + rows * ex, d.dim[1]] };
   }
   function layout() {
-    const d = st.def, W = wrap.clientWidth, maxH = Math.max(260, Math.min(innerHeight * 0.62, 640));
+    const pad = mp.on ? 58 : 0;   // im Wettkampf steht oben links die Uhr: Zeichnung darunter beginnen
+    const d = st.def, W = wrap.clientWidth, maxH = Math.max(260, Math.min(innerHeight * 0.62, 640)) - pad;
     if (!W) return;
     const fit = m => Math.min(W / (d.nx + m[3] + m[1]), maxH / (d.ny + m[0] + m[2]));
     let s = fit(d.margin), F;
     for (let pass = 0; pass < 3; pass++) { F = frame(s); s = fit(F.m); }
-    const [mt, mr, mb, ml] = F.m, H = Math.round(s * (d.ny + mt + mb)), dpr = devicePixelRatio || 1;
+    const [mt, mr, mb, ml] = F.m, H = Math.round(s * (d.ny + mt + mb)) + pad, dpr = devicePixelRatio || 1;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    G = { s, W, H, ox: (W - s * (d.nx + ml + mr)) / 2 + s * ml, oy: s * (mt + d.ny), dim: F.dim };
+    G = { s, W, H, ox: (W - s * (d.nx + ml + mr)) / 2 + s * ml, oy: s * (mt + d.ny) + pad, dim: F.dim };
   }
   const P = ([i, j]) => [G.ox + i * G.s, G.oy - j * G.s];   // Rasterpunkt in Pixel
   const bw = () => Math.max(2.5, G.s * 0.055);
@@ -1011,8 +1088,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
     $('tb-bars').textContent = `${count(conn)}: ${profText(Uint8Array.from(on, (x, k) => conn[k] ? x : 0))}`;
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
-    $('tb-probe').textContent = st.probes ? `${st.probes} übrig` : 'verbraucht';
-    $('tb-sheet').textContent = `${st.li + 1} von ${LEVELS.length}`;
+    $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
+    const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
+    $('tb-sheet').textContent = mp.on ? (rid ? `Runde ${rid}` : 'Warteraum') : `${st.li + 1} von ${LEVELS.length}`;
   }
 
   function controls() {
@@ -1051,6 +1129,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
         legend(colors && r.disp && r.reason !== 'mechanismus');
         const what = colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
         $('verdict').innerHTML = `<p>${what}</p>${hint}`;
+        if (plays() && !mp.sub) pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: r.ok ? 1 : 0 });   // Stand für den Beamer
       } else {
         st.view = { mode: 'blind' };
         legend(false);
@@ -1058,7 +1137,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
         $('verdict').innerHTML = `<p>${st.def.note}</p>${hint}`;
       }
     }
-    panel(); controls(); render();
+    panel(); controls(); render(); mpRender();
   }
 
   function loadLevel(i) {
@@ -1080,6 +1159,12 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     for (const k of ch) st.on[k] = erase ? 0 : st.prof;
     st.phase = 'design';
     return true;
+  }
+  function clearAll() {
+    if (!editable()) return;
+    const start = startOn(st.L);
+    if (st.on.every((x, k) => x === start[k])) return;
+    pushUndo(); st.on = start; st.phase = 'design'; refresh();
   }
   function undo() {
     if (!st.undo.length || !editable()) return;
@@ -1254,6 +1339,709 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     setTimeout(pump, 300);
   }
 
+  // ---------- Wettkampf: Verbindung ----------
+  // Über den eigenen Spielserver (WebSocket ws neben der Seite). Genutzt wird nur Presence: jedes Gerät zeigt seinen Stand.
+  // Mitspielende: k Raumcode, n Name, j Beitrittszeit, r Runde, s abgegeben (0/1), d Entwurf, kg Masse mal 10 und
+  // ok (hält gerade) für den Beamer. Spielleitung: k, h = 1, n, j, g {rid, ph, lv, dur, left, m},
+  // res [[peer, Name, Masse mal 10, hält]], sc [[Name, Punkte]]; p = 1, wenn sie mitspielt (dann auch r, s, d, kg, ok)
+  function serverRoom() {
+    if (!/^https?:$/.test(location.protocol) || !window.WebSocket) return null;
+    // relativ zur Seite, damit das Spiel auch unter einem Unterpfad läuft (etwa /knotenpunkt/ hinter nginx)
+    const u = new URL('ws', location.href);
+    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = u.href;
+    const mine = {}, others = new Map(), peerH = [], connH = [];
+    let ws = null, me = null, up = false, delay = 1000, sendTimer = null, pending = false;
+    const snap = () => {
+      const a = me ? [{ peer: me, isMe: true, sameTab: true, presence: { ...mine } }] : [];
+      for (const [peer, presence] of others) a.push({ peer, isMe: false, sameTab: false, presence });
+      return a;
+    };
+    const notify = () => {
+      if (pending) return;
+      pending = true;
+      setTimeout(() => { pending = false; const peers = snap(); peerH.forEach(h => h({ peers })); }, 16);
+    };
+    const setUp = v => { if (up !== v) { up = v; connH.forEach(h => h(v)); } };
+    const flush = () => { sendTimer = null; if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'p', presence: mine })); };
+    const open = () => {
+      ws = new WebSocket(url);
+      ws.onopen = () => { delay = 1000; flush(); };
+      ws.onmessage = e => {
+        let m;
+        try { m = JSON.parse(e.data); } catch { return; }
+        if (m.t === 'welcome') {
+          me = m.you; others.clear();
+          for (const p of m.peers || []) others.set(p.peer, p.presence || {});
+          setUp(true); notify();
+        } else if (m.t === 'p' && m.peer !== me) { others.set(m.peer, m.presence || {}); notify(); }
+        else if (m.t === 'bye') { others.delete(m.peer); notify(); }
+      };
+      ws.onclose = () => { setUp(false); others.clear(); notify(); setTimeout(open, delay); delay = Math.min(delay * 2, 15000); };
+    };
+    open();
+    return {
+      presence(patch) {
+        for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; }
+        if (!sendTimer) sendTimer = setTimeout(flush, 33);
+        notify();
+        return Promise.resolve();
+      },
+      onPeers(h) { peerH.push(h); setTimeout(() => h({ peers: snap() }), 0); },
+      onConnection(h) { connH.push(h); setTimeout(() => h(up), 0); },
+    };
+  }
+
+  const net = { R: null, mode: '', up: false, err: '', peers: [], started: false };
+  const myPres = {};
+  function pres(patch) {
+    for (const k in patch) { if (patch[k] === null) delete myPres[k]; else myPres[k] = patch[k]; }
+    if (net.R) net.R.presence(patch).catch(e => { net.err = (e && e.code) || 'Fehler'; mpRender(); });
+  }
+  async function netStart() {
+    if (net.started) return;
+    net.started = true;
+    // Nur der Knotenpunkt-Server kennt api/status; auf statischem Hosting (GitHub Pages) gibt es keinen Wettkampf
+    const ok = await fetch('api/status', { cache: 'no-store' })
+      .then(r => r.ok && /json/.test(r.headers.get('content-type') || '')).catch(() => false);
+    const R = ok ? serverRoom() : null;
+    net.mode = R ? 'server' : 'none';
+    if (!R) { mpRender(); return; }
+    net.R = R;
+    R.onPeers(ch => { net.peers = ch.peers; mpSync(); });
+    R.onConnection(c => { net.up = c; mpRender(); });
+    if (Object.keys(myPres).length) R.presence({ ...myPres });
+    mpRender();
+  }
+
+  // Entwurf: je Zeichen drei Stäbe mit je 2 Bit (Profil 0 bis 3); fremde Entwürfe werden geprüft, gesperrte Stäbe bleiben
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  function encode(on) {
+    let s = '';
+    for (let i = 0; i < on.length; i += 3) s += B64[(on[i] << 4) | ((on[i + 1] || 0) << 2) | (on[i + 2] || 0)];
+    return s;
+  }
+  function decode(str, L) {
+    if (typeof str !== 'string' || str.length !== Math.ceil(L.nB / 3)) return null;
+    const out = new Uint8Array(L.nB);
+    for (let i = 0; i < str.length; i++) {
+      const v = B64.indexOf(str[i]);
+      if (v < 0) return null;
+      for (let q = 0; q < 3; q++) if (3 * i + q < L.nB) out[3 * i + q] = (v >> (4 - 2 * q)) & 3;
+    }
+    for (let k = 0; k < L.nB; k++) if (L.frozen[k] && !out[k]) out[k] = 1;
+    return out;
+  }
+
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, n);
+  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+  const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const MODEL = { t: 'truss', f: 'frame' };
+  const DURS = [180, 300, 480, 600];
+
+  // Im Wettkampf gibt es keine Probe-Rechnungen: Verformung und Auslastung laufen die ganze Runde live (Wunsch Felix)
+  const mp = { on: false, role: null, code: '', name: '', j: 0, rid: 0, sub: false, revealed: 0, own: null,
+    g: { rid: 0, ph: 'lobby', lv: 0, dur: 300, left: 0, m: 't' }, tick: null, deadline: 0, revealTimer: null,
+    snap: null, order: null, shown: 0, boardTimer: null, scores: {}, conflict: false, hp: false, zoom: null, zm: null, all: false, bset: null, bsc: null };
+  let mpScr = '';
+  // hp: die Spielleitung spielt selbst mit (Name in mp.name), zoom: Entwurf in der großen Ansicht nach der Auflösung, zm: Modell
+  // dort, all: Mitspielende sehen die Übersicht aller Entwürfe, bset: Runde der Übersicht, bsc: Gesamtwertung dazu
+  const plays = () => mp.role === 'player' || (mp.role === 'host' && mp.hp);
+  const inRoom = () => net.peers.filter(p => !p.sameTab && p.presence && p.presence.k === mp.code);
+  const myPeer = () => (net.peers.find(p => p.sameTab) || {}).peer || '';
+  // Mitspielende, dazu eine Spielleitung, die mitspielt (p: 1)
+  const players = () => inRoom().filter(p => (p.presence.h !== 1 || p.presence.p === 1) && typeof p.presence.n === 'string');
+  // Spielleitung ist, wer im Raum als Leitung am längsten dabei ist
+  function hostPeer() {
+    let best = null;
+    for (const p of inRoom()) {
+      const j = p.presence.j;
+      if (p.presence.h !== 1 || typeof j !== 'number') continue;
+      if (!best || j < best.presence.j || (j === best.presence.j && p.peer < best.peer)) best = p;
+    }
+    return best;
+  }
+  function validG(g) {
+    if (!g || typeof g !== 'object' || !Number.isInteger(g.rid) || g.rid < 0) return null;
+    if (!['lobby', 'design', 'reveal'].includes(g.ph) || !Number.isInteger(g.lv) || !LEVELS[g.lv]) return null;
+    return { rid: g.rid, ph: g.ph, lv: g.lv, dur: Number(g.dur) || 300, left: Math.max(0, Math.min(999, Math.round(Number(g.left) || 0))), m: g.m === 'f' ? 'f' : 't' };
+  }
+  const hostG = () => { const h = hostPeer(); return h ? validG(h.presence.g) : null; };
+  const validRes = res => (Array.isArray(res) ? res : [])
+    .filter(e => Array.isArray(e) && typeof e[0] === 'string' && Number.isFinite(e[2])).slice(0, 80)
+    .map(e => ({ peer: e[0], name: clean(e[1], 16) || 'Jemand', kg: Math.max(0, Math.min(1e6, e[2])) / 10, ok: e[3] === 1 }));
+  const validSc = sc => (Array.isArray(sc) ? sc : []).filter(e => Array.isArray(e) && Number.isFinite(e[1])).slice(0, 20)
+    .map(e => ({ name: clean(e[0], 16) || 'Jemand', pts: Math.round(e[1]) }));
+
+  // Rangfolge einer Runde: was hält, nach Masse aufsteigend, danach was versagt. Gleiche Masse gleicher Platz,
+  // alle, die versagen, teilen sich den letzten.
+  const rankSort = list => list.sort((a, b) => (b.ok - a.ok) || (a.kg - b.kg));
+  const places = list => list.map((e, i) => {
+    let p = i;
+    while (p > 0 && list[p - 1].ok === e.ok && (!e.ok || list[p - 1].kg === e.kg)) p--;
+    return p + 1;
+  });
+  // Eintrag der Auflösung: Entwurf im Modell der Runde gerechnet
+  function entry(peer, name, on) {
+    const res = FEM.analyze(st.L, on, st.model);
+    return { peer, name, on, res, ok: res.ok, kg: Math.round(kg(on, res.conn) * 10) / 10 };
+  }
+
+  // ---------- Wettkampf: Mitspielende ----------
+  // Runde vorbereiten: Bauteil und Rechenmodell der Spielleitung, Verformung und Auslastung live
+  function roundSetup(g) {
+    st.model = MODEL[g.m]; st.liveDef = true; st.liveUtil = true;
+    loadLevel(g.lv);
+    st.probes = 0;
+    panel();
+  }
+  function joinRoom() {
+    const name = clean($('mp-name').value, 16), code = normCode($('mp-code').value);
+    if (!name || code.length !== 4) { $('mp-msg').textContent = 'Bitte einen Namen und den vierstelligen Raumcode eingeben.'; return; }
+    store.set('name', name);
+    Object.assign(mp, { role: 'player', name, code, j: Date.now(), rid: 0, sub: false, revealed: 0, own: null });
+    pres({ k: code, n: name, j: mp.j, r: 0, s: 0 });
+    mpSync();
+  }
+  function startPlayerRound(g) {
+    stopBoard();
+    Object.assign(mp, { rid: g.rid, sub: false, own: null, all: false, zoom: null, order: null, snap: null });
+    pres({ r: g.rid, s: 0, d: null, kg: 0, ok: 0 });
+    roundSetup(g);
+  }
+  function playerSubmit() {
+    if (!plays() || mp.sub || !editable()) return;
+    mp.sub = true;
+    Object.assign(st, { phase: 'locked', drag: null, hover: null });
+    pres({ r: mp.rid, s: 1, d: encode(st.on) });
+    controls(); render(); mpRender();
+    if (mp.role === 'host') hostSync();   // waren alle anderen schon fertig, startet jetzt die Auflösung
+  }
+  function playerSync() {
+    const g = hostG();
+    if (!g) return;
+    if (g.ph === 'design') {
+      if (g.rid !== mp.rid) startPlayerRound(g);
+      if (g.left <= 1) playerSubmit();   // kurz vor Schluss automatisch abgeben
+    } else if (g.ph === 'reveal' && g.rid === mp.rid && mp.revealed !== g.rid) {
+      mp.revealed = g.rid;
+      st.drag = null;
+      ownReveal();
+    }
+  }
+  // eigenen Entwurf aufdecken wie im Einzelspiel
+  function ownReveal() {
+    const r = FEM.analyze(st.L, st.on, st.model);
+    st.res = { [st.model]: r }; st.shown = st.model; st.phase = 'result';
+    reveal(r, st.on, true, () => { mp.own = r; mpRender(); });
+  }
+
+  // ---------- Wettkampf: Spielleitung ----------
+  const scoreList = () => Object.values(mp.scores).sort((a, b) => b.pts - a.pts).slice(0, 10).map(s => [s.name, s.pts]);
+  const saveHost = () => store.set('host', { code: mp.code, rid: mp.g.rid, lv: mp.g.lv, dur: mp.g.dur, m: mp.g.m,
+    hp: mp.hp, name: mp.name, scores: mp.scores, t: Date.now() });
+  function savedHost() {
+    const h = store.get('host');
+    return h && typeof h.code === 'string' && Date.now() - h.t < 6 * 3600e3 ? h : null;
+  }
+  function hostGame(resume) {
+    const r = resume ? savedHost() : null;
+    Object.assign(mp, { role: 'host', code: r ? normCode(r.code) : newCode(), j: Date.now(), snap: null, order: null, zoom: null,
+      hp: !!(r && r.hp), name: r && typeof r.name === 'string' ? clean(r.name, 16) : mp.name,
+      scores: r && r.scores && typeof r.scores === 'object' ? r.scores : {},
+      g: { rid: r ? r.rid | 0 : 0, ph: 'lobby', lv: r && LEVELS[r.lv] ? r.lv : 0, dur: r && DURS.includes(r.dur) ? r.dur : 300, left: 0, m: r && r.m === 'f' ? 'f' : 't' } });
+    roundSetup(mp.g);
+    st.phase = 'locked';
+    pres({ k: mp.code, h: 1, n: 'Spielleitung', j: mp.j, g: { ...mp.g }, sc: scoreList() });
+    saveHost(); mpSync();
+  }
+  function hostStart() {
+    const lv = +$('mp-lv').value, dur = +$('mp-dur').value, m = $('mp-m').value === 'f' ? 'f' : 't';
+    mp.hp = $('mp-hp').checked;
+    if (mp.hp) { mp.name = clean($('mp-hn').value, 16) || 'Spielleitung'; store.set('name', mp.name); }
+    Object.assign(mp.g, { rid: mp.g.rid + 1, ph: 'design', lv, dur, left: dur, m });
+    Object.assign(mp, { deadline: performance.now() + dur * 1000, snap: null, order: null, zoom: null });
+    stopBoard();
+    if (mp.hp) Object.assign(mp, { rid: mp.g.rid, sub: false, own: null });
+    roundSetup(mp.g);
+    if (!mp.hp) st.phase = 'locked';
+    pres({ g: { ...mp.g }, res: null, ...(mp.hp ? { n: mp.name, p: 1, r: mp.g.rid, s: 0, d: null, kg: 0, ok: 0 } : { n: 'Spielleitung', p: null }) });
+    clearInterval(mp.tick);
+    mp.tick = setInterval(hostTick, 250);
+    saveHost(); controls(); mpRender();
+  }
+  function hostTick() {
+    if (mp.g.ph !== 'design') { clearInterval(mp.tick); return; }
+    const left = Math.max(0, Math.ceil((mp.deadline - performance.now()) / 1000));
+    if (left !== mp.g.left) { mp.g.left = left; pres({ g: { ...mp.g } }); mpRender(); }
+    if (mp.hp && left <= 1) playerSubmit();   // kurz vor Schluss automatisch abgeben, wie bei allen
+    if (performance.now() > mp.deadline + 2500) hostReveal();   // Nachfrist für automatisch abgegebene Entwürfe
+  }
+  const hostEndNow = () => { mp.deadline = Math.min(mp.deadline, performance.now()); };
+  function hostSync() {
+    const other = hostPeer();
+    mp.conflict = !!other && (other.presence.j < mp.j || (other.presence.j === mp.j && other.peer < myPeer()));
+    if (mp.g.ph === 'design' && !mp.revealTimer) {
+      const ps = players();
+      if ((ps.length || mp.hp) && ps.every(p => p.presence.r === mp.g.rid && p.presence.s === 1) && (!mp.hp || mp.sub))
+        mp.revealTimer = setTimeout(hostReveal, 800);
+    }
+  }
+  // Alle Entwürfe einsammeln, rechnen, werten und die Rangliste für alle veröffentlichen.
+  // Punkte nach Platz: Von n Entwürfen, die halten, bekommt der leichteste n Punkte, der schwerste 1; wer versagt, 0.
+  function hostReveal() {
+    if (mp.g.ph !== 'design') return;
+    if (mp.hp) playerSubmit();   // spielt die Spielleitung mit und hat noch nicht abgegeben, jetzt
+    clearInterval(mp.tick); clearTimeout(mp.revealTimer); mp.revealTimer = null;
+    const list = [];
+    for (const p of players()) {
+      const q = p.presence, on = q.r === mp.g.rid && q.s === 1 ? decode(q.d, st.L) : null;
+      if (on) list.push(entry(p.peer, clean(q.n, 16) || 'Jemand', on));
+    }
+    if (mp.hp) list.push(entry(myPeer(), mp.name, st.on.slice()));
+    rankSort(list);
+    const pl = places(list), n = list.filter(e => e.ok).length;
+    list.forEach((e, i) => {
+      const key = e.name.toLowerCase(), s = mp.scores[key] || (mp.scores[key] = { name: e.name, pts: 0 });
+      if (e.ok) s.pts += n - pl[i] + 1;
+    });
+    mp.snap = list;
+    Object.assign(mp.g, { ph: 'reveal', left: 0 });
+    const patch = { g: { ...mp.g }, res: list.map(e => [e.peer, e.name, Math.round(e.kg * 10), e.ok ? 1 : 0]), sc: scoreList() };
+    // Presence ist auf 4 KiB begrenzt: bei sehr vielen Mitspielenden die Liste kürzen
+    const size = o => new TextEncoder().encode(JSON.stringify(o)).length;
+    while (patch.res.length && size({ ...myPres, ...patch }) > 3800) patch.res.pop();
+    pres(patch);
+    saveHost();
+    mp.bset = { rid: mp.g.rid };
+    startBoard();
+  }
+  // Übersicht für Mitspielende: Rangliste der Spielleitung, Entwürfe aus der Live-Verbindung, jedes Gerät rechnet selbst nach
+  function playerAll() {
+    const h = hostPeer(), g = hostG();
+    if (!h || !g || g.rid !== mp.rid || g.ph !== 'reveal' || !mp.own) return;
+    const by = new Map(net.peers.map(p => [p.peer, p.presence || {}])), list = [];
+    for (const e of validRes(h.presence.res)) {
+      const q = by.get(e.peer), on = q && q.r === mp.rid && q.s === 1 ? decode(q.d, st.L) : null;
+      if (on) list.push(entry(e.peer, e.name, on));
+    }
+    rankSort(list);
+    Object.assign(mp, { snap: list, all: true, zoom: null, bset: { rid: g.rid }, bsc: h.presence.sc });
+    startBoard();
+  }
+  // zurück zum eigenen Ergebnis
+  function playerMine() {
+    stopBoard();
+    Object.assign(mp, { all: false, zoom: null });
+    st.animId++; st.busy = false;   // laufende Animation der großen Ansicht anhalten
+    const r = mp.own;
+    if (r) {
+      st.on = r.on.slice(); st.conn = r.conn;
+      const stress = r.disp && r.reason !== 'mechanismus';
+      st.view = { mode: 'result', res: r, on: st.on, scale: stress ? niceScale(r) : 0, t: 0 };
+      showFem(r, st.view.scale); legend(stress); stamp(r.ok);
+    }
+    panel(); controls(); mpRender();
+  }
+  function hostNext() {
+    stopBoard();
+    mp.g.ph = 'lobby'; mp.zoom = null;
+    pres({ g: { ...mp.g } });
+    mpRender();
+  }
+  function leaveRoom(endGame) {
+    clearInterval(mp.tick); clearTimeout(mp.revealTimer); mp.revealTimer = null; stopBoard();
+    if (mp.role === 'host' && endGame) store.set('host', null);
+    if (mp.role) pres({ k: null, h: null, n: null, j: null, g: null, r: null, s: null, d: null, kg: null, ok: null, res: null, sc: null, p: null });
+    Object.assign(mp, { role: null, code: '', rid: 0, sub: false, revealed: 0, own: null, snap: null, order: null, conflict: false, zoom: null, all: false });
+    $('zoomhead').hidden = true;
+    st.phase = 'design';
+    mpScr = ''; mpRender();
+  }
+
+  // Auflösung am Beamer: Entwürfe nacheinander aufdecken, der leichteste zuletzt
+  function stopBoard() { clearTimeout(mp.boardTimer); mp.boardTimer = null; }
+  function startBoard() {
+    stopBoard();
+    mp.order = mp.snap.slice().sort((a, b) => b.kg - a.kg);
+    mp.shown = 0;
+    mpScr = '';
+    mpRender();
+    const step = reduce ? 0 : Math.max(450, Math.min(1300, 14000 / Math.max(1, mp.order.length)));
+    const next = () => {
+      if (!mp.order) return;
+      if (mp.shown < mp.order.length) { mp.shown++; showCards(); mp.boardTimer = setTimeout(next, step); }
+      else { mp.boardTimer = null; mpRender(); }
+    };
+    mp.boardTimer = setTimeout(next, reduce ? 0 : 700);
+  }
+  function showCards(redraw) {
+    for (const card of document.querySelectorAll('#mp-cards .card')) {
+      const i = +card.dataset.i, e = mp.order[i], open = i < mp.shown;
+      if (!redraw && card.dataset.open === String(open)) continue;
+      card.dataset.open = String(open);
+      drawMini(card.querySelector('canvas'), e.on, open ? e.res : null);
+      card.querySelector('.vl').textContent = open ? `${fmt(e.kg)} kg, ${count(e.on)} Stäbe` : '';
+      const vd = card.querySelector('.vd');
+      vd.textContent = !open ? '' : e.ok ? 'Hält' : 'Hält nicht';
+      vd.className = 'vd' + (!open ? '' : e.ok ? ' ok' : ' bad');
+      if (open && !redraw && !reduce) stampCard(card, e.ok);
+    }
+  }
+  // Aufdecken: Stempel „Hält“ oder „Hält nicht“ schlägt auf die Karte und wandert dann klein in die Zeile darunter
+  function stampCard(card, ok) {
+    const pic = card.querySelector('.pic'), vd = card.querySelector('.vd'), s = document.createElement('div');
+    s.className = 'cstamp ' + (ok ? 'ok' : 'bad');
+    s.textContent = ok ? 'Hält' : 'Hält nicht';
+    pic.appendChild(s);
+    const a = s.getBoundingClientRect(), b = vd.getBoundingClientRect();
+    s.style.setProperty('--dx', `${b.left + b.width / 2 - a.left - a.width / 2}px`);
+    s.style.setProperty('--dy', `${b.top + b.height / 2 - a.top - a.height / 2}px`);
+    vd.classList.add('late');
+    const done = () => { s.remove(); vd.classList.remove('late'); };
+    s.addEventListener('animationend', done);
+    setTimeout(done, 1600);   // falls die Animation nicht zu Ende läuft, etwa im Hintergrund-Tab
+  }
+  // Übersicht zu sehen: am Beamer in der Auflösung, bei Mitspielenden auf Wunsch
+  const boardOn = () => mp.role === 'host' ? mp.g.ph === 'reveal' : mp.all;
+  // Große Ansicht eines Entwurfs, sobald alle aufgedeckt sind: das FE-Ergebnis wie im Einzelspiel, umschaltbar auf das
+  // andere Rechenmodell
+  function zoomTo(i) {
+    const n = mp.order ? mp.order.length : 0;
+    if (!boardOn() || !n || mp.shown < n) return;
+    mp.zoom = (i + n) % n; mp.zm = st.model;
+    const e = mp.order[mp.zoom];
+    st.on = e.on.slice(); st.conn = e.res.conn;
+    reveal(e.res, st.on, true, () => { $('stamp').hidden = true; mpRender(); });
+    mpRender();
+  }
+  function zoomModel(m) {
+    if (mp.zoom == null || st.busy || m === mp.zm) return;
+    const e = mp.order[mp.zoom];
+    mp.zm = m;
+    const r = m === st.model ? e.res : (e.alt = e.alt || FEM.analyze(st.L, e.on, m));
+    reveal(r, st.on, false, () => { $('stamp').hidden = true; mpRender(); });
+    mpRender();
+  }
+  function zoomEnd() {
+    if (mp.zoom == null) return;
+    mp.zoom = null;
+    st.animId++; st.busy = false;   // laufende Animation anhalten
+    legend(false); $('femline').textContent = '';
+    controls(); mpRender();
+  }
+  // Karte: Stabwerk klein, Strichstärke nach Profil, nach dem Aufdecken in Farbe der Auslastung
+  function drawMini(canvas, on, r) {
+    const d = st.def, L = st.L, W = canvas.clientWidth || 150, s = Math.min(W / (d.nx + 1), innerHeight * 0.45 / (d.ny + 1));
+    const H = Math.round(s * (d.ny + 1)), dpr = devicePixelRatio || 1, x0 = (W - s * d.nx) / 2, y0 = H - s / 2;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = H + 'px';
+    const c = canvas.getContext('2d'), Q = ([i, j]) => [x0 + i * s, y0 - j * s];
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.lineWidth = 1; c.strokeStyle = C.grid; c.beginPath();
+    for (const b of L.bars) { c.moveTo(...Q(b.p)); c.lineTo(...Q(b.q)); }
+    c.stroke();
+    c.lineCap = 'round';
+    const colors = r && r.disp && r.reason !== 'mechanismus';
+    L.bars.forEach((b, k) => {
+      if (!on[k] || (r && !r.conn[k])) return;
+      c.strokeStyle = colors && r.fe[k] ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel;
+      c.lineWidth = Math.max(1.5, s * 0.055 * [1, 1.5, 2.05][on[k] - 1]);
+      c.beginPath(); c.moveTo(...Q(b.p)); c.lineTo(...Q(b.q)); c.stroke();
+    });
+  }
+
+  // ---------- Wettkampf: Anzeige ----------
+  const esoKg = () => { const e = esoNow(); return e && e.res.ok ? kg(e.on, e.res.conn) : null; };
+  function rankHtml(list, me, ghostKg) {
+    if (!list.length) return '<p>Keine Entwürfe eingegangen.</p>';
+    const ghost = () => `<li class="ghost"><span class="pl"></span><span class="nm">Algorithmus</span><span class="vl">${fmt(ghostKg)} kg</span></li>`;
+    const rows = [], pl = places(list);
+    let ghostDone = ghostKg == null;
+    list.forEach((e, i) => {
+      if (!ghostDone && (!e.ok || e.kg > ghostKg)) { rows.push(ghost()); ghostDone = true; }
+      rows.push(`<li class="${e.ok ? '' : 'out'}${me && e.peer === me ? ' me' : ''}"><span class="pl">${pl[i]}.</span>` +
+        `<span class="nm">${esc(e.name)}</span><span class="vl">${e.ok ? fmt(e.kg) + ' kg' : 'hält nicht'}</span></li>`);
+    });
+    if (!ghostDone) rows.push(ghost());
+    return `<ol class="rank">${rows.join('')}</ol>`;
+  }
+  const scoreHtml = sc => !sc.length ? '<p>Noch keine Punkte.</p>' : `<ol class="rank">${sc.map(s =>
+    `<li><span class="pl">${sc.findIndex(t => t.pts === s.pts) + 1}.</span><span class="nm">${esc(s.name)}</span>` +
+    `<span class="vl">${fmt(s.pts)}</span></li>`).join('')}</ol>`;
+  function netText() {
+    if (net.mode === 'none') return 'Auf dieser Seite läuft kein Spielserver, der Wettkampf geht hier nicht. Er läuft im HTWK-Netz unter der Adresse, die die Spielleitung nennt. „Allein üben“ funktioniert.';
+    if (net.err) return `Live-Verbindung gestört (${net.err}).`;
+    return net.up ? 'Live verbunden' : 'Verbinde …';
+  }
+  const joinText = () => `Mitspielen: <span class="joinurl">${esc(location.origin + location.pathname + '#' + mp.code)}</span> öffnen, Namen eintragen, fertig.`;
+  const roundText = () => `${esc(st.def.name)}, gerechnet als ${NAME[st.model]}`;
+
+  function mpScreen() {
+    if (!mp.role) return 'start';
+    if (mp.role === 'host') {
+      if (mp.g.ph === 'design' && mp.hp && !mp.sub) return 'h-play';
+      if (mp.g.ph === 'reveal' && mp.zoom != null) return 'h-zoom';
+      return 'h-' + mp.g.ph;
+    }
+    if (mp.rid && mp.revealed === mp.rid) return !mp.all ? 'p-result' : mp.zoom != null ? 'p-zoom' : 'p-all';
+    const g = hostG();
+    if (g && g.ph === 'design' && g.rid === mp.rid) return mp.sub ? 'p-locked' : 'p-design';
+    return 'p-wait';
+  }
+  const DRAWING = { 'p-design': 1, 'p-locked': 1, 'p-result': 1, 'p-zoom': 1, 'h-design': 1, 'h-play': 1, 'h-zoom': 1 };
+  const SIDE = {
+    start: () => `<p class="mp-net" id="mp-net"></p>
+      <h3>Mitspielen</h3>
+      <label class="field">Name, ein Pseudonym genügt<input id="mp-name" maxlength="16" autocomplete="nickname"></label>
+      <label class="field">Raumcode<input id="mp-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <button class="btn primary" type="button" data-act="join">Beitreten</button>
+      <p class="mp-warn" id="mp-msg"></p>
+      <h3>Spiel leiten</h3>
+      <p>Für Leinwand oder Beamer: Raum eröffnen, Bauteil, Rechenmodell und Zeit wählen, Runden starten. Wer leitet, kann selbst mitspielen.</p>
+      <button class="btn" type="button" data-act="host">Neues Spiel eröffnen</button>
+      <button class="btn" type="button" data-act="resume" id="mp-resume" hidden></button>`,
+    'p-wait': () => `<p class="mp-net" id="mp-net"></p>
+      <p>Raum <b>${esc(mp.code)}</b>, Sie spielen als <b>${esc(mp.name)}</b>.</p>
+      <p id="mp-msg"></p>
+      <button class="btn" type="button" data-act="leave">Raum verlassen</button>`,
+    'p-design': () => `<p class="mp-net" id="mp-net"></p>
+      <p><b>Runde ${mp.role === 'host' ? mp.g.rid : mp.rid}: ${roundText()}.</b> Bauen Sie bis zum Ablauf der Zeit ein Tragwerk, das hält,
+        so leicht wie möglich. Verformung und Auslastung sehen Sie live.</p>
+      <p id="mp-live"></p>
+      <div class="actions">
+        <button class="btn primary" type="button" data-act="submit">Abgeben</button>
+        <button class="btn" type="button" data-act="undo">Rückgängig</button>
+        <button class="btn" type="button" data-act="clear">Alles leeren</button>
+      </div>
+      <p id="mp-msg"></p>`,
+    'p-locked': () => `<p class="mp-net" id="mp-net"></p>
+      <p><b>Abgegeben.</b> Die Auflösung startet, sobald alle fertig sind oder die Zeit abläuft.</p>
+      <p id="mp-msg"></p>`,
+    'p-result': () => `<p class="mp-net" id="mp-net"></p>
+      <div id="mp-result"></div>
+      <button class="btn primary" type="button" data-act="all" id="mp-all-btn">Alle Entwürfe ansehen</button>
+      <h3>Diese Runde</h3><div id="mp-rank"></div>
+      <h3>Gesamtwertung</h3><div id="mp-score"></div>
+      <p>Die nächste Runde startet die Spielleitung.</p>`,
+    'h-lobby': () => `<p class="mp-net" id="mp-net"></p>
+      <p class="mp-warn" id="mp-warn"></p>
+      <label class="field">Bauteil<select id="mp-lv">${LEVELS.map((d, i) => `<option value="${i}">${i + 1} ${esc(d.name)}</option>`).join('')}</select></label>
+      <div class="row2">
+        <label class="field">Rechnen als<select id="mp-m"><option value="t">Fachwerk</option><option value="f">Rahmen</option></select></label>
+        <label class="field">Zeit<select id="mp-dur">${DURS.map(s => `<option value="${s}">${mmss(s)} min</option>`).join('')}</select></label>
+      </div>
+      <label class="live"><input type="checkbox" id="mp-hp"> Selbst mitspielen</label>
+      <label class="field" id="mp-hn-row">Name in der Rangliste<input id="mp-hn" maxlength="16" autocomplete="nickname"></label>
+      <p class="mp-note" id="mp-hp-note">Ihr Entwurf ist während der Runde auf dem Beamer zu sehen.</p>
+      <button class="btn primary" type="button" data-act="start">Runde ${mp.g.rid + 1} starten</button>
+      <h3>Gesamtwertung</h3><div id="mp-score"></div>
+      <button class="btn" type="button" data-act="end">Spiel beenden</button>`,
+    'h-design': () => `<p class="mp-net" id="mp-net"></p>
+      <p><b>Runde ${mp.g.rid}: ${roundText()}</b> läuft.</p>
+      ${mp.hp ? '<p><b>Ihr Entwurf ist abgegeben.</b></p>' : ''}
+      <p id="mp-msg"></p>
+      <ul class="chips" id="mp-chips"></ul>
+      <p class="mp-note">Hinter den Namen: Masse des aktuellen Entwurfs, grün heißt: hält gerade.</p>
+      <button class="btn primary" type="button" data-act="now">Jetzt auflösen</button>`,
+    'h-play': () => SIDE['p-design']() + `<ul class="chips" id="mp-chips"></ul>
+      <button class="btn" type="button" data-act="now">Jetzt auflösen</button>`,
+    'h-reveal': () => `<p class="mp-net" id="mp-net"></p>
+      <p><b>Auflösung Runde ${mp.g.rid}.</b> Die Entwürfe werden nacheinander aufgedeckt, der leichteste zuletzt.</p>
+      <p class="mp-note" id="mp-hint"></p>
+      <button class="btn primary" type="button" data-act="next">Nächste Runde</button>
+      <button class="btn" type="button" data-act="end">Spiel beenden</button>`,
+    'h-zoom': () => `<p class="mp-net" id="mp-net"></p>
+      <p id="mp-zoom"></p>
+      <div class="model" role="group" aria-label="Ansicht">
+        <span>Ansicht</span>
+        <span class="tools"><button type="button" data-act="zt" id="mp-zt">Fachwerk</button><button type="button" data-act="zf" id="mp-zf">Rahmen</button></span>
+      </div>
+      <div class="row2">
+        <button class="btn" type="button" data-act="zprev">Vorheriger</button>
+        <button class="btn" type="button" data-act="znext">Nächster</button>
+      </div>
+      <button class="btn primary" type="button" data-act="zback">Alle Entwürfe</button>
+      <button class="btn" type="button" data-act="${mp.role === 'host' ? 'next">Nächste Runde' : 'mine">Mein Ergebnis'}</button>`,
+    'p-zoom': () => SIDE['h-zoom'](),
+    'p-all': () => `<p class="mp-net" id="mp-net"></p>
+      <p><b>Alle Entwürfe der Runde ${mp.bset.rid}.</b> Sie werden nacheinander aufgedeckt, der leichteste zuletzt.</p>
+      <p class="mp-note" id="mp-hint"></p>
+      <button class="btn primary" type="button" data-act="mine">Mein Ergebnis</button>
+      <p>Die nächste Runde startet die Spielleitung.</p>`,
+  };
+  const BOARD = {
+    start: () => `<h2>Wettkampf</h2>
+      <ol class="steps">
+        <li>Die Spielleitung eröffnet ein Spiel und zeigt den Raumcode.</li>
+        <li>Alle treten mit Namen und Code bei und bekommen dasselbe Bauteil und dasselbe Rechenmodell.</li>
+        <li>Bis die Zeit abläuft, baut jede Person ein Tragwerk; Verformung und Auslastung sind live zu sehen.</li>
+        <li>Dann rechnet die FEM alle Entwürfe. Wer versagt, bekommt nichts. Von allen, die halten, bekommt der leichteste die meisten Punkte.</li>
+      </ol>`,
+    'p-wait': () => `<h2>Raum ${esc(mp.code)}</h2><p id="mp-wait"></p><ul class="chips" id="mp-chips"></ul>`,
+    'h-lobby': () => `<p>Raumcode</p><div class="bigcode">${esc(mp.code)}</div>
+      <p id="mp-join"></p>
+      <h2 id="mp-count"></h2>
+      <ul class="chips" id="mp-chips"></ul>`,
+    // Karten im Raster mit etwa Wurzel aus der Anzahl Spalten: wenige Entwürfe werden groß
+    'h-reveal': () => `<h2>Runde ${mp.bset.rid}: ${roundText()}</h2>
+      <div class="cards" id="mp-cards" style="--cols: ${Math.ceil(Math.sqrt((mp.order || []).length)) || 1}">${(mp.order || []).map((e, i) =>
+        `<div class="card" data-act="zoom" data-i="${i}"><div class="pic"><canvas></canvas></div>` +
+        `<div class="cap"><span class="nm">${esc(e.name)}</span><span class="vd"></span></div><div class="vl"></div></div>`).join('')}</div>
+      <div class="split" id="mp-final"></div>`,
+    'p-all': () => BOARD['h-reveal'](),
+  };
+
+  function mpSync() {
+    if (mp.role === 'player') playerSync();
+    else if (mp.role === 'host') hostSync();
+    mpRender();
+  }
+  function mpRender() {
+    if (!mp.on) return;
+    const scr = mpScreen(), show = !!DRAWING[scr];
+    if (scr !== mpScr) {
+      mpScr = scr;
+      $('mp-ui').innerHTML = SIDE[scr]();
+      $('mp-board').innerHTML = show ? '' : BOARD[scr]();
+      $('drawing').hidden = !show;
+      $('mp-board').hidden = show;
+      $('profiles').hidden = scr !== 'p-design' && scr !== 'h-play';
+      $('howto').hidden = scr !== 'p-design' && scr !== 'h-play';
+      if (scr === 'start') {
+        const n = store.get('name'), h = normCode(location.hash.slice(1));
+        if (typeof n === 'string') $('mp-name').value = n;
+        if (h.length === 4) $('mp-code').value = h;
+      }
+      if (scr === 'h-lobby') {
+        $('mp-lv').value = String(mp.g.rid ? (mp.g.lv + 1) % LEVELS.length : mp.g.lv);   // nach einer Runde das nächste Bauteil
+        $('mp-dur').value = String(mp.g.dur);
+        $('mp-m').value = mp.g.m;
+        const n = store.get('name'), syncHp = () => { $('mp-hn-row').hidden = $('mp-hp-note').hidden = !$('mp-hp').checked; };
+        $('mp-hp').checked = mp.hp;
+        $('mp-hn').value = mp.name || (typeof n === 'string' ? n : '');
+        $('mp-hp').onchange = syncHp;
+        syncHp();
+      }
+      if (scr === 'h-reveal' || scr === 'p-all') showCards(true);
+      if (show) requestAnimationFrame(() => { if (wrap.clientWidth) { layout(); render(); } });
+    }
+    fillScreen(scr);
+  }
+  // Wechselnde Teile eines Bildschirms; nur neu schreiben, wenn sich etwas geändert hat (Eingabefelder bleiben stehen)
+  function fillScreen(scr) {
+    const set = (id, html) => { const el = $(id); if (el && el._h !== html) { el._h = html; el.innerHTML = html; } };
+    const netEl = $('mp-net');
+    if (netEl) { netEl.textContent = netText(); netEl.classList.toggle('on', net.up && !net.err); }
+    const ps = players(), rid = mp.role === 'host' ? mp.g.rid : mp.rid;
+    const done = p => p.presence.r === rid && p.presence.s === 1;
+    // auf dem Beamer während der Runde: Masse des aktuellen Entwurfs, grün, wenn er gerade hält
+    const live = p => p.presence.r !== rid ? '' : `: ${fmt(Math.max(0, Math.min(1e6, Number(p.presence.kg) || 0)) / 10)} kg`;
+    const chips = mark => ps.map(p => `<li class="${mark && p.presence.r === rid && p.presence.ok === 1 ? 'done' : ''}">`
+      + `${esc(clean(p.presence.n, 16) || 'Jemand')}${mark ? live(p) : ''}${mark && done(p) ? ', abgegeben' : ''}</li>`).join('');
+    let left = null;
+    if (scr === 'h-design' || scr === 'h-play') left = mp.g.left;
+    if (scr === 'p-design' || scr === 'p-locked') { const g = hostG(); left = g ? g.left : null; }
+    $('timer').hidden = left == null;
+    if (left != null) { $('timer').textContent = mmss(left); $('timer').classList.toggle('low', left <= 15); }
+
+    if (scr === 'start') {
+      const r = savedHost(), b = $('mp-resume');
+      if (b) b.hidden = !r;
+      if (b && r) b.textContent = `Spiel ${r.code} fortsetzen (nach Runde ${r.rid})`;
+      for (const x of document.querySelectorAll('#mp-ui [data-act]')) x.disabled = net.mode === 'none';
+    }
+    if (scr === 'p-wait') {
+      const g = hostG();
+      const t = !hostPeer() ? 'Noch keine Spielleitung in diesem Raum. Stimmt der Code?'
+        : g && g.ph === 'design' ? 'Die Runde läuft schon, Sie steigen in der nächsten ein.' : 'Gleich geht es los, die Spielleitung startet die Runde.';
+      set('mp-wait', esc(t)); set('mp-msg', esc(t));
+      set('mp-chips', `<li class="done">${esc(mp.name)} (Sie)</li>` + chips(false));
+    }
+    if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
+    if (scr === 'p-design' || scr === 'h-play') {
+      const r = st.view.res;
+      set('mp-live', r ? esc(`Live: ${statusText(r)} Masse ${fmt(kg(st.on, r.conn))} kg.`) : '');
+    }
+    if (scr === 'h-play') set('mp-chips', chips(true));
+    if (scr === 'p-result') {
+      const h = hostPeer(), g = hostG(), res = h && g && g.rid === mp.rid ? validRes(h.presence.res) : [];
+      const me = myPeer(), i = res.findIndex(e => e.peer === me), r = mp.own;
+      let t = 'Rechnet …';
+      if (r) {
+        t = r.ok ? `<span class="t-ok">Hält.</span> Ihr Tragwerk wiegt ${fmt(kg(r.on, r.conn))} kg.`
+          : `<span class="t-bad">Hält nicht.</span> ${failWhy(r)}`;
+        t += i >= 0 ? ` Platz ${places(res)[i]} von ${res.length}.` : res.length ? ' Ihr Entwurf kam nicht rechtzeitig an und wird nicht gewertet.' : '';
+      }
+      set('mp-result', `<p>${t}</p>`);
+      $('mp-all-btn').disabled = !r || !res.length;   // erst nach dem eigenen Aufdecken
+      set('mp-rank', res.length ? rankHtml(res, me, esoKg()) : '<p>Die Rangliste kommt gleich.</p>');
+      set('mp-score', scoreHtml(h ? validSc(h.presence.sc) : []));
+    }
+    if (scr === 'h-lobby') {
+      set('mp-count', ps.length === 1 ? '1 Person im Raum' : `${ps.length} Personen im Raum`);
+      set('mp-chips', chips(false));
+      set('mp-join', joinText());
+      set('mp-score', scoreHtml(validSc(scoreList())));
+      set('mp-warn', mp.conflict ? 'In diesem Raum leitet schon jemand anderes. Bitte ein neues Spiel eröffnen.' : '');
+    }
+    if (scr === 'h-design') {
+      const me = mp.hp ? 1 : 0;   // die mitspielende Spielleitung hat schon abgegeben
+      set('mp-msg', `${ps.filter(done).length + me} von ${ps.length + me} haben abgegeben.`);
+      set('mp-chips', chips(true));
+    }
+    if ((scr === 'h-reveal' || scr === 'p-all') && mp.order && mp.shown >= mp.order.length) {
+      const host = mp.role === 'host';
+      set('mp-final', `<div><h2>Rangliste</h2>${rankHtml(mp.snap, host ? '' : myPeer(), esoKg())}</div>` +
+        `<div><h2>Gesamtwertung</h2>${scoreHtml(validSc(host ? scoreList() : mp.bsc))}</div>`);
+      if (mp.order.length) {
+        $('mp-cards').classList.add('all');
+        set('mp-hint', 'Für die große Ansicht einen Entwurf anklicken, mit den Pfeiltasten blättern.');
+      }
+    }
+    $('zoomhead').hidden = scr !== 'h-zoom' && scr !== 'p-zoom';
+    if (scr === 'h-zoom' || scr === 'p-zoom') {
+      const e = mp.order[mp.zoom], r = mp.zm === st.model ? e.res : e.alt || e.res;
+      const w = st.busy ? ' wait' : '';   // Urteil erst nach der Animation
+      const other = mp.zm !== st.model ? `, als ${NAME[mp.zm]} gerechnet` : '';
+      set('zoomhead', `<span class="nm">${esc(e.name)}</span> <span class="${r.ok ? 't-ok' : 't-bad'}${w}">${r.ok ? 'Hält' : 'Hält nicht'}${other}</span>` +
+        `<span class="zs">${fmt(e.kg)} kg.<span class="${w}"> ${r.ok ? `Max. Auslastung ${fmt(100 * r.maxUtil)} %.` : failWhy(r)}</span></span>`);
+      set('mp-zoom', `Entwurf ${mp.zoom + 1} von ${mp.order.length}. Pfeiltasten blättern, Esc zeigt wieder alle.`);
+      $('mp-zt').setAttribute('aria-pressed', String(mp.zm === 'truss'));
+      $('mp-zf').setAttribute('aria-pressed', String(mp.zm === 'frame'));
+    }
+    panel();
+  }
+
+  function setMode(on) {
+    if (mp.on === on) return;
+    mp.on = on;
+    $('m-solo').setAttribute('aria-pressed', String(!on));
+    $('m-mp').setAttribute('aria-pressed', String(on));
+    $('levels').hidden = on; $('solo-ui').hidden = on; $('mp-ui').hidden = !on;
+    if (on) { mpScr = ''; netStart(); mpRender(); return; }
+    leaveRoom(false);
+    $('drawing').hidden = false; $('mp-board').hidden = true; $('timer').hidden = true; $('profiles').hidden = false; $('howto').hidden = false;
+    // Einstellungen für allein wiederherstellen
+    st.model = store.get('model') === 'frame' ? 'frame' : 'truss';
+    st.liveDef = store.get('live-def') !== false; st.liveUtil = store.get('live-util') === true;
+    loadLevel(st.li);
+  }
+
+  const ACTS = { join: joinRoom, host: () => hostGame(false), resume: () => hostGame(true), submit: playerSubmit, undo, clear: clearAll,
+    leave: () => leaveRoom(false), end: () => leaveRoom(true), start: hostStart, now: hostEndNow, next: hostNext,
+    zoom: b => zoomTo(+b.dataset.i), zprev: () => zoomTo(mp.zoom - 1), znext: () => zoomTo(mp.zoom + 1), zback: zoomEnd,
+    zt: () => zoomModel('truss'), zf: () => zoomModel('frame'), all: playerAll, mine: playerMine };
+  for (const id of ['mp-ui', 'mp-board']) $(id).addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (b && !b.disabled && ACTS[b.dataset.act]) ACTS[b.dataset.act](b);
+  });
+  $('mp-ui').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.target.id === 'mp-name' || e.target.id === 'mp-code')) joinRoom(); });
+  $('m-solo').onclick = () => setMode(false);
+  $('m-mp').onclick = () => setMode(true);
+
   // ---------- Eingabe ----------
   // Ziehen von Knoten zu Knoten zeichnet eine Linie (waagrecht, senkrecht oder unter 45°). Liegt am Anfang der Linie schon
   // ein Stab im gewählten Profil, nimmt der Zug die Stäbe entlang der Linie weg, sonst bekommen sie das gewählte Profil.
@@ -1354,6 +2142,12 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    // Auflösung: Pfeiltasten öffnen und blättern die große Ansicht, Esc zeigt wieder alle Entwürfe
+    if (boardOn() && mp.order && mp.order.length && mp.shown >= mp.order.length) {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); zoomTo(mp.zoom == null ? (d > 0 ? 0 : -1) : mp.zoom + d); return; }
+      if (e.key === 'Escape' && mp.zoom != null) { zoomEnd(); return; }
+    }
     if (e.key === '1' || e.key === '2' || e.key === '3') setProf(+e.key);
   });
 
@@ -1365,12 +2159,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   $('b-submit').onclick = submit;
   $('b-probe').onclick = probe;
   $('b-undo').onclick = undo;
-  $('b-clear').onclick = () => {
-    if (!editable()) return;
-    const start = startOn(st.L);
-    if (st.on.every((x, k) => x === start[k])) return;
-    pushUndo(); st.on = start; st.phase = 'design'; refresh();
-  };
+  $('b-clear').onclick = clearAll;
   $('b-full').onclick = () => {
     if (!editable() || st.on.every(x => x === st.prof)) return;
     pushUndo(); st.on = Uint8Array.from(st.L.domain, () => st.prof); st.phase = 'design'; refresh();
@@ -1403,6 +2192,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   readColors();
   loadLevel(0);
+  if (/^#[A-Za-z0-9]{4}$/.test(location.hash)) setMode(true);   // Einladungslink mit Raumcode
 })();
 
 </script>
