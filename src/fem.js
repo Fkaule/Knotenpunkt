@@ -12,10 +12,12 @@ const FEM = (() => {
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
   // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken.
-  // Ergebnis [Auslastung, knickt]
+  // Lk = Infinity: Der Druckstab läuft über ein Gelenk ohne seitlichen Halt und knickt dort aus, schon bei kleiner Kraft
+  // (unter 1 N gilt als kraftlos). Ergebnis [Auslastung, Art: 1 Fließen, 2 Knicken, 3 Gelenk knickt aus]
   function barUtil(p, N, M, Lk) {
-    const uy = (Math.abs(N) / p.A + M / p.W) / RE, uk = N < 0 ? -N / ncr(p, Lk) : 0;
-    return [Math.max(uy, uk), uk > uy];
+    const uy = (Math.abs(N) / p.A + M / p.W) / RE;
+    const uk = N >= 0 ? 0 : Number.isFinite(Lk) ? -N / ncr(p, Lk) : N < -1 ? Infinity : 0;
+    return [Math.max(uy, uk), uk === Infinity ? 3 : uk > uy ? 2 : 1];
   }
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
   // nehmen sie einen nennenswerten Teil der Arbeit der Last auf, ist das Stabwerk beweglich (Mechanismus).
@@ -97,8 +99,11 @@ const FEM = (() => {
     return reach(L, fe, L.loadNodes);
   }
 
-  // Knicklänge: gerader Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt
-  function bucklingLength(L, fe, k) {
+  // Knicklänge: gerader Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt (Rahmen: der
+  // steife Knoten trägt durch). Im Fachwerk ist jeder Knoten ein Gelenk: Läuft der Stab über einen Knoten ohne Querstab, hat
+  // dieser keinen seitlichen Halt (Ausnahmefall), unter Druck knickt er dort aus; Ergebnis Infinity. Vorgegebene, gesperrte
+  // Stäbe laufen als ein Profil durch (Fahrbahn, Stützen und Riegel des Tors).
+  function bucklingLength(L, fe, k, model = 'frame') {
     let len = 0;
     for (const start of [L.bars[k].a, L.bars[k].b]) {
       let n = start, cur = k;
@@ -107,6 +112,7 @@ const FEM = (() => {
         if (L.fix[n] || here.length !== 1) break;
         const o = here[0], bo = L.bars[o], bc = L.bars[cur];
         if (Math.abs(bo.c * bc.s - bo.s * bc.c) > 1e-9) break;   // nicht in einer Linie
+        if (model === 'truss' && !(L.frozen[o] && L.frozen[cur])) return Infinity;
         len += bo.len; cur = o; n = bo.a === n ? bo.b : bo.a;
       }
     }
@@ -204,7 +210,7 @@ const FEM = (() => {
     if (!(work > 0) || spring > MECH * work) { res.reason = 'mechanismus'; res.ms = performance.now() - t0; return res; }
 
     // Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler)
-    let nY = 0, nK = 0;
+    let nY = 0, nK = 0, nH = 0;
     for (const el of els) {
       const { k, b, p } = el, u = el.dof.map((q, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
       let N, M1 = 0, M2 = 0;
@@ -216,14 +222,14 @@ const FEM = (() => {
         M1 = dv + EI / Lb * (4 * ul[2] + 2 * ul[5]);
         M2 = dv + EI / Lb * (2 * ul[2] + 4 * ul[5]);
       }
-      const Lk = bucklingLength(L, fe, k), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      const Lk = bucklingLength(L, fe, k, model), [util, kind] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
       res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.Lk[k] = Lk; res.util[k] = util;
-      if (util > 1) { res.fail[k] = knickt ? 2 : 1; if (knickt) nK++; else nY++; }
+      if (util > 1) { res.fail[k] = kind; if (kind === 3) nH++; else if (kind === 2) nK++; else nY++; }
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.ok = res.maxUtil <= 1;
-    res.reason = res.ok ? '' : res.fail[res.maxBar] === 2 ? 'knicken' : 'spannung';
-    res.nYield = nY; res.nBuckle = nK;
+    res.reason = res.ok ? '' : res.fail[res.maxBar] >= 2 ? 'knicken' : 'spannung';
+    res.nYield = nY; res.nBuckle = nK; res.nHinge = nH;
     res.ms = performance.now() - t0;
     return res;
   }

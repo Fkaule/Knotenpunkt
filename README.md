@@ -78,6 +78,8 @@ So stören unbelastete, lose Teile nicht, und ein gerader Stabzug über einen Kn
 
 mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: der gerade Stabzug bis zum nächsten Knoten, an dem ein Lager sitzt oder ein Stab quer ansetzt (Euler-Fall 2). Hält, wenn $`\eta \le 1`$ in allen Stäben.
 
+**Gelenk ohne Querstab (Fachwerk):** Im Fachwerk ist jeder Knoten ein Gelenk. Läuft ein Druckstab gerade über einen Knoten, an dem kein weiterer Stab ansetzt, hat der Knoten keinen seitlichen Halt und knickt aus (Ausnahmefall der Statik): $`\eta = \infty`$, sobald $`N < 0`$. Unter Zug ist so ein Knoten stabil. Im Rahmen trägt der steife Knoten durch, dort gilt die Knicklänge des ganzen Stabzugs. Vorgegebene, gesperrte Stäbe (Fahrbahn, Stützen und Riegel des Tors) laufen als ein Profil durch.
+
 **Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden (Knoten ohne Lager, Last und weiteren Stab) und Teile ohne Last tragen nichts und werden nicht gerechnet, zählen aber bei der Masse.
 
 **Gegner:** beginnt mit dem vollen Raster im mittleren Profil und bemisst es (fully stressed design: jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält; wiederholt, bis sich nichts mehr ändert, weil sich die Kräfte mit den Steifigkeiten umlagern). Dann entfernt er immer den am geringsten ausgelasteten Stab, bemisst neu und behält das Ergebnis, wenn es hält und leichter ist. Was beim Entfernen beweglich wird oder nicht mehr hält, versucht er nicht noch einmal.
