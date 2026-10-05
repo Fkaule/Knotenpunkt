@@ -35,8 +35,9 @@
   const bandOf = u => u > 1 ? OVER : BANDS[Math.min(9, Math.floor(Math.max(0, u) * 10))];
   // Versagen des Ganzen: beweglich oder instabil; res.disp zeigt dann die Bewegungs- oder Knickform
   const modeShape = r => r.reason === 'mechanismus' || r.reason === 'stabil';
-  // Auslastung in Prozent, um 100 % mit einer Nachkommastelle, damit „hält“ und „versagt“ nie dieselbe Zahl zeigen
-  const pct = u => { const x = 100 * u; return fmt(x, x >= 99.5 && x < 100.5 ? 1 : 0); };
+  // Auslastung in Prozent; um 100 % mit einer Nachkommastelle und zur richtigen Seite gerundet, damit „hält“ höchstens
+  // 100,0 % und „versagt“ mindestens 100,1 % zeigt
+  const pct = u => { const x = 100 * u; return x >= 99.5 && x < 100.5 ? fmt((u <= 1 ? Math.floor : Math.ceil)(x * 10) / 10, 1) : fmt(x); };
   // Bauteile: die festen (LEVELS), dazu Zufallsbauteile mit Nummer und eigene aus dem Baukasten mit Code
   const RANDOM = LEVELS.length, CUSTOM = RANDOM + 1;
   const newNr = () => 1 + Math.floor(Math.random() * 99999);
