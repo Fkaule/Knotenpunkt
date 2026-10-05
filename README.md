@@ -18,10 +18,17 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
 - Live beim Zeichnen, einzeln oder zusammen: Verformung (fester Maßstab je Bauteil: das volle Raster im mittleren Profil verschiebt sich um 0,3 % der größten Abmessung, ein weicher Entwurf entsprechend mehr, sanft begrenzt auf 5 %) und Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
 
+## Zufall und Baukasten
+
+- **Zufall:** Aus einer Nummer (1 bis 99.999) entsteht auf jedem Gerät dasselbe Bauteil: Kragarm, Träger (mit Fahrbahn, Last oben oder unten, Kragende), Konsole, Winkel, Rahmen (wahlweise mit vorgegebenen Stützen und Riegel), Mast, Galgen, Hänger. Der Link `#nr-12345` hält es fest, `#zufall` zieht eine neue Nummer. Nach den festen Bauteilen führt „Nächstes Bauteil“ zum Zufall.
+- **Baukasten** („Bauen“, Link `#bauen`): übernimmt das aktuelle Bauteil zum Abwandeln. Raster als Rechtecke aus Feldern (bis 12 × 8), Einspannung, Festlager und Loslager an Randknoten (die Seite ergibt sich aus der Lage des Zeigers, beim Ziehen einer Einspannung aus der Zugrichtung), Lasten an Knoten in 45°-Schritten, gesperrte Stäbe. „Beträge automatisch“ bemisst alle Lasten gleich; sonst gelten die eigenen Beträge (0,5 bis 200 kN), sofern das volle Raster im mittleren Profil sie als Fachwerk und als Rahmen trägt. „Spielen“ schreibt das Bauteil als Code in den Link (`#bau-…`).
+- **Bemessung:** Die Lasten werden so skaliert, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, gerundet auf glatte Beträge (0,5 bis 200 kN); so liegt die Auslastung zwischen 42 und 64 %. Ein Bauteil gilt nur, wenn das volle Raster in beiden Modellen hält; jedes ist damit lösbar.
+- Ränder und Bemaßung ergeben sich bei diesen Bauteilen aus Lagern und Lasten, das Höhenmaß steht auf der freieren Seite.
+
 ## Wettkampf
 
 - Läuft über einen eigenen Spielserver (`server.mjs`, Node und ws), der nur den Status aller Geräte verteilt (Presence); gerechnet wird in den Browsern. Auf GitHub Pages gibt es keinen Spielserver, dort ist der Wettkampf gesperrt.
-- Die Spielleitung eröffnet einen Raum mit vierstelligem Code (Link mit `#CODE`), wählt Bauteil, Rechenmodell (Fachwerk oder Rahmen) und Zeit (3 bis 10 Minuten) und kann selbst mitspielen.
+- Die Spielleitung eröffnet einen Raum mit vierstelligem Code (Link mit `#CODE`), wählt Bauteil (fest, Zufallsbauteil oder das zuletzt im Baukasten gespielte), Rechenmodell (Fachwerk oder Rahmen) und Zeit (3 bis 10 Minuten) und kann selbst mitspielen. Nach den festen Bauteilen schlägt sie Zufall vor.
 - Keine Probe-Rechnungen: Verformung und Auslastung sind die ganze Runde live zu sehen. Der Beamer zeigt dabei je Person die Masse des aktuellen Entwurfs, grün, wenn er gerade hält.
 - Auflösung: Entwürfe nacheinander aufdecken, der leichteste zuletzt; große Ansicht je Entwurf, umschaltbar zwischen Fachwerk und Rahmen; der Algorithmus als Geisterzeile.
 - Punkte nach Platz je Runde: Von n Entwürfen, die halten, bekommt der leichteste n Punkte, der schwerste 1; wer versagt, 0. Die Gesamtwertung zählt über alle Runden.
@@ -34,7 +41,7 @@ npm run build
 python3 -m http.server 8913
 ```
 
-Dann http://localhost:8913/ öffnen. `npm test` prüft den FE-Kern, `node scripts/kalibrieren.js` zeigt je Bauteil die Auslastung des vollen Rasters und das Ergebnis des Algorithmus.
+Dann http://localhost:8913/ öffnen. `npm test` prüft FE-Kern und Bauteile, `node scripts/kalibrieren.js` zeigt je Bauteil die Auslastung des vollen Rasters und das Ergebnis des Algorithmus.
 
 ## Wie gerechnet wird
 
@@ -111,6 +118,8 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 - Last direkt auf dem Lager ist kein Mechanismus; eine Lagerung, die die Last zufällig nicht anregt, ist trotzdem beweglich
 - Profile: Auslastung und Masse je Profil; Bemessen wählt das kleinste Profil, das hält
 - Algorithmus: Ergebnis hält in beiden Modellen und ist deutlich leichter als das volle Raster
+- Zufallsbauteile: gleiche Nummer, gleiches Bauteil; Nummern 1 bis 150 lösbar (volles Raster hält in beiden Modellen), Auslastung und Beträge im Rahmen
+- Baukasten: Code hin und zurück gleich (getrennte Einspannungen bleiben getrennt), Meldungen für leer, zerfallen, ohne Lager, ohne Last, beweglich, Last direkt auf dem Lager, zu große Last
 
 Unabhängig geprüft (05.10.2026, drei getrennte Prüfungen mit eigenen Referenzlösern): Elementmatrizen, Band-Cholesky, Schnittgrößen und Gleichgewicht bis 1e-8, Darstellung der Biegelinie gegen die analytische Lösung; die Befunde dieser Prüfung (Scheinaussteifung, nicht angeregte Mechanismen, Seitwärtsknicken, Querschnittswerte) sind eingearbeitet.
 

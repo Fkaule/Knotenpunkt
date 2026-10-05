@@ -90,6 +90,14 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 .t-ok { color: var(--ok); font-weight: 700; }
 .t-bad { color: var(--bad); font-weight: 700; }
 .live { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ink2); cursor: pointer; }
+/* Baukasten: Richtung und Betrag der gewählten Last */
+.ledit { display: grid; gap: 8px; border: 1.5px solid var(--rule); padding: 10px; }
+.ledit p { margin: 0; font-weight: 600; }
+.dirs { display: grid; grid-template-columns: repeat(3, 42px); gap: 4px; }
+.dirs button { font: 600 18px/1 var(--f-body); height: 36px; color: var(--ink); background: transparent; border: 1.5px solid var(--rule);
+  border-radius: 2px; cursor: pointer; }
+.dirs button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--sheet); }
+.dirs button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .rules { font-size: 14px; color: var(--ink2); }
 .rules summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 .rules ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -182,6 +190,19 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             Beginnt der Zug auf einem Stab, der schon in diesem Profil daliegt, nimmt er die Stäbe entlang der Linie weg.
             <b>Antippen</b> setzt einen einzelnen Stab oder nimmt ihn weg, mit einem anderen Profil gewählt bekommt er dieses Profil.
             Dicke Profile tragen mehr, wiegen aber mehr. Beim Abgeben rechnet die FEM: Gewertet wird die Masse, wenn das Tragwerk hält.</p>
+          <p class="howto" id="howto-edit" hidden><b>Baukasten:</b> Mit <b>Raster</b> ein Rechteck aufziehen: Beginnt es auf einem leeren Feld, kommt es dazu, sonst wird es entfernt.
+            <b>Einspannung</b>, <b>Festlager</b> und <b>Loslager</b> per Klick an einen Randknoten setzen, die Einspannung auch über mehrere Knoten ziehen; die Seite ergibt sich aus der Lage des Zeigers.
+            <b>Last</b>: Ein Klick auf einen Knoten setzt eine Last, ein Klick auf eine Last wählt sie, ein zweiter dreht sie um 45°; Richtung und Betrag stehen rechts.
+            <b>Gesperrt</b>: Stäbe ziehen oder antippen, die immer da sind und bleiben, etwa eine Fahrbahn.
+            Mit „Beträge automatisch“ werden alle Lasten gleich groß und so bemessen, dass das volle Raster im mittleren Profil zu etwa 55 % ausgelastet ist. Beim Spielen steht das Bauteil im Link der Seite.</p>
+          <div class="tools" id="etools" role="group" aria-label="Baukasten" hidden>
+            <button type="button" data-t="raster" aria-pressed="true">Raster</button>
+            <button type="button" data-t="wand" aria-pressed="false">Einspannung</button>
+            <button type="button" data-t="fest" aria-pressed="false">Festlager</button>
+            <button type="button" data-t="los" aria-pressed="false">Loslager</button>
+            <button type="button" data-t="last" aria-pressed="false">Last</button>
+            <button type="button" data-t="sperre" aria-pressed="false">Gesperrt</button>
+          </div>
           <div class="tools" id="profiles" role="group" aria-label="Profil zum Zeichnen">
             <button type="button" id="pr-1" aria-pressed="true">40 × 3</button>
             <button type="button" id="pr-2" aria-pressed="false">60 × 4</button>
@@ -215,7 +236,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
       </table>
 
       <div id="solo-ui" class="side">
-        <div class="model" role="group" aria-label="Rechenmodell">
+        <div class="model" id="model-row" role="group" aria-label="Rechenmodell">
           <span id="model-label">Rechnen als</span>
           <span class="tools">
             <button type="button" id="g-truss" aria-pressed="true" title="Knoten sind Gelenke, Stäbe tragen nur Normalkraft">Fachwerk</button>
@@ -229,6 +250,21 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           <button class="btn" id="b-clear" type="button">Alles leeren</button>
           <button class="btn" id="b-full" type="button" title="Vorlage: jedes Rasterfeld mit vier Randstäben und zwei Diagonalen im gewählten Profil">Volles Raster</button>
         </div>
+        <div class="actions" id="act-edit" hidden>
+          <button class="btn primary" id="b-play" type="button">Spielen</button>
+          <button class="btn" id="b-edclear" type="button">Leeren</button>
+        </div>
+        <div class="ledit" id="ledit" hidden>
+          <label class="live"><input type="checkbox" id="l-auto"> Beträge automatisch</label>
+          <p id="l-name">Last</p>
+          <div class="dirs" id="l-dirs" role="group" aria-label="Richtung der Last">
+            <button type="button" data-deg="135" title="nach links oben">↖</button><button type="button" data-deg="90" title="nach oben">↑</button><button type="button" data-deg="45" title="nach rechts oben">↗</button>
+            <button type="button" data-deg="180" title="nach links">←</button><span></span><button type="button" data-deg="0" title="nach rechts">→</button>
+            <button type="button" data-deg="-135" title="nach links unten">↙</button><button type="button" data-deg="-90" title="nach unten">↓</button><button type="button" data-deg="-45" title="nach rechts unten">↘</button>
+          </div>
+          <label class="field">Betrag in kN<input type="number" id="l-kn" min="0.5" max="200" step="0.5" inputmode="decimal"></label>
+          <button class="btn" type="button" id="l-del">Last entfernen</button>
+        </div>
         <div class="actions" id="act-result" hidden>
           <button class="btn primary" id="b-retry" type="button">Neuer Versuch</button>
           <button class="btn" id="b-eso" type="button">Lösung des Algorithmus</button>
@@ -237,7 +273,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 
         <div class="verdict" id="verdict" aria-live="polite"></div>
 
-        <div class="model" role="group" aria-label="Beim Zeichnen live zeigen">
+        <div class="model" id="live-row" role="group" aria-label="Beim Zeichnen live zeigen">
           <span>Live</span>
           <span class="tools">
             <button type="button" id="lv-def" aria-pressed="true" title="Verformung beim Zeichnen, fester Maßstab je Bauteil">Verformung</button>
@@ -258,6 +294,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts, zählen aber bei der Masse.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
+            <li><b>Zufall und Baukasten:</b> Zu jeder Nummer gehört ein festes Bauteil, gleich auf jedem Gerät. Die Lasten sind so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, auf glatte Beträge gerundet. So ist jedes Bauteil lösbar: Das volle Raster hält als Fachwerk und als Rahmen. Im Baukasten gilt das auch für selbst gesetzte Beträge.</li>
           </ul>
         </details>
         <details class="rules">
@@ -816,6 +853,315 @@ const LEVELS = (() => {
 })();
 if (typeof module !== 'undefined') module.exports = LEVELS;
 
+/* Zufallsbauteile und Baukasten: Aus einer Nummer entsteht auf jedem Gerät dasselbe Bauteil (Raster, Lager, Lasten,
+   gesperrte Stäbe). Die Lasten werden wie bei den festen Bauteilen bemessen: Das volle Raster im mittleren Profil ist als
+   Fachwerk zu etwa 55 % ausgelastet, gerundet auf einen glatten Betrag (rund 42 bis 64 %). Kein DOM. */
+const PARTS = (FEM => {
+  const NICE = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100, 120, 150, 200];   // kN
+  const TARGET = 0.55;   // Auslastung des vollen Rasters
+  const MAX_N = 12, MAX_KN = 200;   // größtes Raster in Feldern, größte Last
+  const S2 = Math.SQRT1_2;
+  // Lastrichtungen in 45°-Schritten ohne Winkelfunktionen, damit alle Geräte bitgenau dasselbe rechnen
+  const DIR = { 0: [1, 0], 45: [S2, S2], 90: [0, 1], 135: [-S2, S2], 180: [-1, 0], '-45': [S2, -S2], '-90': [0, -1], '-135': [-S2, -S2] };
+
+  // Zufallszahlen aus der Nummer (mulberry32)
+  function rng(seed) {
+    let a = seed >>> 0;
+    const next = () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    return {
+      int: (lo, hi) => hi <= lo ? lo : lo + Math.floor(next() * (hi - lo + 1)),
+      pick: a => a[Math.floor(next() * a.length)],
+      chance: p => next() < p,
+    };
+  }
+
+  // Raster aus Feldern, y nach oben; node(i, j): Knoten gehört zum Bauteil (ein Feld daneben)
+  function grid(nx, ny, v = 1) {
+    const c = new Uint8Array(nx * ny).fill(v);
+    const has = (x, y) => x >= 0 && y >= 0 && x < nx && y < ny && c[x + y * nx] === 1;
+    const fill = (x0, y0, w, h, val) => {
+      for (let y = Math.max(0, y0); y < Math.min(ny, y0 + h); y++) for (let x = Math.max(0, x0); x < Math.min(nx, x0 + w); x++) c[x + y * nx] = val;
+    };
+    const node = (i, j) => has(i, j) || has(i - 1, j) || has(i, j - 1) || has(i - 1, j - 1);
+    return { nx, ny, c, has, fill, node };
+  }
+  const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, k) => a + k);
+  const wall = (nodes, side) => ({ kind: 'wand', nodes, side, fix: 7 });
+  // Das Loslager hält nur senkrecht zur Auflagefläche
+  const pin = (kind, node, side) => ({ kind, nodes: [node], side, fix: kind === 'fest' ? 3 : side === 'left' || side === 'right' ? 1 : 2 });
+  const load = (node, deg, kn = 1) => ({ node, deg, fx: DIR[deg][0] * 1000 * kn, fy: DIR[deg][1] * 1000 * kn });
+  const column = (g, i) => range(0, g.ny).filter(j => g.node(i, j));   // Knoten auf der senkrechten Linie x = i
+  const row = (g, j) => range(0, g.nx).filter(i => g.node(i, j));
+
+  // ---------- Bauformen ----------
+  function kragarm(R) {
+    const nx = R.int(5, 9), ny = R.int(2, 4), left = R.chance(0.7), g = grid(nx, ny);
+    if (ny >= 3 && R.chance(0.4)) {   // zum freien Ende hin verjüngt
+      const w = R.int(1, Math.floor(nx / 3)), h = R.int(1, ny - 2);
+      g.fill(left ? nx - w : 0, R.chance(0.5) ? ny - h : 0, w, h, 0);
+    }
+    const ex = left ? nx : 0, ys = column(g, ex), y = R.pick([ys[0], ys[0], ys[ys.length - 1], ys[ys.length >> 1]]);
+    return { name: 'Kragarm', note: `${left ? 'Links' : 'Rechts'} eingespannt, die Last greift am freien Ende an.`, g,
+      supports: [wall(column(g, left ? 0 : nx).map(j => [left ? 0 : nx, j]), left ? 'left' : 'right')],
+      loads: [load([ex, y], R.pick([-90, -90, -90, 90, -45, -135]))] };
+  }
+
+  function traeger(R) {
+    const nx = R.int(6, 11), ny = R.int(2, 4), g = grid(nx, ny);
+    const oL = R.pick([0, 0, 0, 1, 2]), oR = R.pick([0, 0, 0, 1, 2]), xa = oL, xb = nx - oR, festLeft = R.chance(0.6);
+    const supports = [pin(festLeft ? 'fest' : 'los', [xa, 0], 'bottom'), pin(festLeft ? 'los' : 'fest', [xb, 0], 'bottom')];
+    const mode = R.pick(['fahrbahn', 'fahrbahn', 'oben', 'unten', 'kragende']);
+    let loads, frozen = [], how;
+    if (mode === 'fahrbahn') {   // Fahrbahn unten bleibt, an jedem ihrer Knoten zwischen den Lagern eine Last
+      frozen = range(0, nx - 1).map(i => [i, 0, i + 1, 0]);
+      loads = range(xa + 1, xb - 1).map(i => load([i, 0], -90));
+      how = 'die Fahrbahn unten bleibt, an jedem ihrer Knoten zwischen den Lagern hängt eine Last';
+    } else if (mode === 'kragende' && Math.max(oL, oR) >= 1) {
+      loads = [load([oL >= oR ? 0 : nx, ny], -90)];
+      how = 'am Kragende drückt die Last';
+    } else {
+      const top = mode !== 'unten', x = R.int(xa + 1, xb - 1);
+      loads = [load([x, top ? ny : 0], top ? R.pick([-90, -90, -90, -45, -135]) : -90)];
+      if (R.chance(0.4) && xb - x >= 3) loads.push(load([R.int(x + 2, xb - 1), top ? ny : 0], -90));
+      how = top ? 'die Last drückt von oben' : 'unten hängt die Last';
+    }
+    return { name: 'Träger', note: `Festlager ${festLeft ? 'links' : 'rechts'}, Loslager ${festLeft ? 'rechts' : 'links'}, ${how}.`, g,
+      supports, loads, frozen };
+  }
+
+  // an der Wand, Arm oben oder unten
+  function konsole(R) {
+    const nx = R.int(4, 8), ny = R.int(4, 7), wl = R.int(1, 2), wa = R.int(1, 2), left = R.chance(0.6), armTop = R.chance(0.6);
+    const g = grid(nx, ny, 0), ya = armTop ? ny - wa : 0, ex = left ? nx : 0;
+    g.fill(left ? 0 : nx - wl, 0, wl, ny, 1); g.fill(0, ya, nx, wa, 1);
+    return { name: 'Konsole', note: `${left ? 'Links' : 'Rechts'} an der Wand befestigt, am Ende des Arms greift die Last an.`, g,
+      supports: [wall(column(g, left ? 0 : nx).map(j => [left ? 0 : nx, j]), left ? 'left' : 'right')],
+      loads: [load([ex, R.int(ya, ya + wa)], R.pick([-90, -90, -90, left ? -45 : -135]))] };
+  }
+
+  // oben an der Decke, Schenkel nach unten, Arm unten zur Seite
+  function winkel(R) {
+    const nx = R.int(4, 7), ny = R.int(4, 7), wl = R.int(1, 2), wa = R.int(1, 2), left = R.chance(0.5);
+    const g = grid(nx, ny, 0), lx = left ? 0 : nx - wl, ex = left ? nx : 0;
+    g.fill(lx, 0, wl, ny, 1); g.fill(0, 0, nx, wa, 1);
+    return { name: 'Winkel', note: 'Oben an der Decke eingespannt, die Last greift am Ende des Schenkels an.', g,
+      supports: [wall(range(lx, lx + wl).map(i => [i, ny]), 'top')],
+      loads: [load([ex, R.int(0, wa)], R.pick([-90, -90, -90, left ? -45 : -135]))] };
+  }
+
+  // zwei Stützen und ein Riegel, innen frei; manchmal sind Stützen und Riegel vorgegeben
+  function rahmen(R) {
+    const nx = R.int(3, 7), ny = R.int(3, 5), g = grid(nx, ny), open = nx >= 4 && R.chance(0.5);
+    if (open) g.fill(1, 0, nx - 2, ny - 1, 0);   // lichter Raum: Stützen und Riegel je ein Feld breit
+    const clamped = R.chance(0.4), fromLeft = R.chance(0.5), mode = R.pick(['wind', 'wind', 'riegel', 'ecke']);
+    const supports = clamped ? [wall([[0, 0], [1, 0]], 'bottom'), wall([[nx - 1, 0], [nx, 0]], 'bottom')]
+      : [pin('fest', [0, 0], 'bottom'), pin(R.chance(0.5) ? 'fest' : 'los', [nx, 0], 'bottom')];
+    let loads;
+    if (mode === 'wind') loads = [load([fromLeft ? 0 : nx, ny], fromLeft ? 0 : 180)];
+    else if (mode === 'riegel') loads = range(1, nx - 1).filter(i => R.chance(0.5)).slice(0, 2).map(i => load([i, ny], -90));
+    else loads = [load([fromLeft ? 0 : nx, ny], fromLeft ? -45 : -135)];
+    if (!loads.length) loads = [load([nx >> 1, ny], -90)];
+    const given = !open && R.chance(0.5);   // wie beim Tor: Stützen und Riegel gesperrt
+    const frozen = given ? [...range(0, ny - 1).map(j => [0, j, 0, j + 1]), ...range(0, ny - 1).map(j => [nx, j, nx, j + 1]),
+      ...range(0, nx - 1).map(i => [i, ny, i + 1, ny])] : [];
+    return { name: 'Rahmen', g, supports, loads, frozen,
+      note: `Zwei Stützen, ${clamped ? 'unten eingespannt' : 'auf Lagern'}, ${mode === 'wind' ? 'Wind von der Seite'
+        : mode === 'riegel' ? 'Last auf dem Riegel' : 'schräge Last an der Ecke'}${given ? ', Stützen und Riegel vorgegeben' : ''}${open ? ', innen frei' : ''}.` };
+  }
+
+  // unten eingespannt, frei stehend oder mit Arm (Galgen)
+  function mast(R) {
+    const w = R.int(1, 2), h = R.int(4, 7);
+    if (R.chance(0.5)) {
+      const la = R.int(2, 4), ha = R.int(1, 2), right = R.chance(0.5), nx = w + la, g = grid(nx, h, 0);
+      const mx = right ? 0 : la, ex = right ? nx : 0;
+      g.fill(mx, 0, w, h, 1); g.fill(right ? w : 0, h - ha, la, ha, 1);
+      return { name: 'Galgen', note: 'Unten eingespannt, am Ende des Arms hängt die Last.', g,
+        supports: [wall(range(mx, mx + w).map(i => [i, 0]), 'bottom')], loads: [load([ex, h - ha], -90)] };
+    }
+    const g = grid(w, h), fromLeft = R.chance(0.5), wind = R.chance(0.67);
+    return { name: 'Mast', note: `Unten eingespannt, oben ${wind ? 'drückt der Wind von der Seite' : 'drückt eine schräge Last'}.`, g,
+      supports: [wall(range(0, w).map(i => [i, 0]), 'bottom')],
+      loads: [load([fromLeft ? 0 : w, h], wind ? (fromLeft ? 0 : 180) : (fromLeft ? -45 : -135))] };
+  }
+
+  // oben an der Decke befestigt, die Last hängt unten neben der Befestigung
+  function haenger(R) {
+    const nx = R.int(4, 8), ny = R.int(2, 4), g = grid(nx, ny), ww = R.int(1, 2), wx = R.int(0, nx - ww);
+    const away = range(0, nx).filter(i => i < wx - 1 || i > wx + ww + 1);
+    const x = away.length ? R.pick(away) : (wx > nx - wx - ww ? 0 : nx);
+    return { name: 'Hänger', note: 'Oben an der Decke befestigt, unten hängt die Last.', g,
+      supports: [wall(range(wx, wx + ww).map(i => [i, ny]), 'top')], loads: [load([x, 0], -90)] };
+  }
+
+  const FORMS = [kragarm, kragarm, traeger, traeger, traeger, konsole, winkel, rahmen, rahmen, mast, mast, haenger];
+  const cutOf = g => { const cut = []; for (let k = 0; k < g.c.length; k++) if (!g.c[k]) cut.push([k % g.nx, Math.floor(k / g.nx)]); return cut; };
+  // Felder hängen über Knoten zusammen (auch über Ecken: dort gibt es gemeinsame Knoten und Stäbe)
+  function connected(g) {
+    const start = g.c.indexOf(1), seen = new Uint8Array(g.c.length), stack = [start];
+    seen[start] = 1;
+    let n = 1;
+    while (stack.length) {
+      const k = stack.pop(), x = k % g.nx, y = (k - x) / g.nx;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy, q = X + Y * g.nx;
+        if (g.has(X, Y) && !seen[q]) { seen[q] = 1; n++; stack.push(q); }
+      }
+    }
+    return n === g.c.reduce((a, b) => a + b, 0);
+  }
+  // Lager und Lasten an Knoten des Bauteils, keine doppelt
+  function itemsError(g, def) {
+    const seen = new Set();
+    for (const s of def.supports) for (const [i, j] of s.nodes) {
+      if (!g.node(i, j)) return 'knoten';
+      if (seen.has(i + ',' + j)) return 'doppelt';
+      seen.add(i + ',' + j);
+    }
+    const ls = new Set();
+    for (const l of def.loads) {
+      if (!g.node(...l.node)) return 'knoten';
+      if (ls.has(l.node.join(','))) return 'doppelt';
+      ls.add(l.node.join(','));
+    }
+    return '';
+  }
+
+  // Volles Raster im mittleren Profil rechnen (als Fachwerk); Grund, wenn es nicht taugt
+  function full(def, model = 'truss') {
+    const L = FEM.level(def);
+    return FEM.analyze(L, Uint8Array.from(L.domain, () => 2), model, true);
+  }
+  // Warum das volle Raster nicht taugt: beweglich (Lagerung reicht nicht), direkt (alle Lasten sitzen auf Lagern, kein Stab
+  // trägt etwas)
+  const unusable = r => r.reason === 'mechanismus' || r.reason === 'lastpfad' ? 'beweglich' : r.reason === '' && !(r.maxUtil > 0) ? 'direkt' : '';
+  // Lasten so skalieren, dass das volle Raster zu gut 50 % ausgelastet ist (linear: Auslastung wächst mit der Last).
+  // Gründe dazu: stark oder schwach (Last über 200 oder unter 0,5 kN), voll (als Rahmen oder Fachwerk hält es nicht)
+  function scale(def) {
+    const r = full(def), why = unusable(r) || (r.reason === 'stabil' ? 'beweglich' : '');
+    if (why) return why;
+    const want = TARGET / r.maxUtil;   // kN je Last
+    if (want > NICE[NICE.length - 1] * 1.3) return 'stark';
+    if (want < NICE[0] / 1.3) return 'schwach';
+    // nächster glatter Betrag im Verhältnis (ohne Logarithmus, der nicht auf allen Geräten bitgenau gleich ist)
+    const off = v => Math.max(v / want, want / v);
+    let F = NICE[0];
+    for (const v of NICE) if (off(v) < off(F)) F = v;
+    for (const ld of def.loads) { ld.fx *= F; ld.fy *= F; }
+    def.util = r.maxUtil * F;
+    return full(def, 'frame').ok && full(def).ok ? '' : 'voll';
+  }
+  // Beträge stehen fest: nur prüfen, ob das volle Raster gelagert ist und in beiden Modellen hält
+  function check(def) {
+    const r = full(def), why = unusable(r);
+    if (why) return why;
+    if (!r.ok || !full(def, 'frame').ok) return 'voll';
+    def.util = r.maxUtil;
+    return '';
+  }
+
+  function generate(nr) {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const R = rng(nr * 7919 + attempt * 104729), p = R.pick(FORMS)(R), g = p.g;
+      if (!p.loads.length || p.supports.some(s => !s.nodes.length) || !connected(g)) continue;
+      const def = { name: p.name, nr, note: p.note, nx: g.nx, ny: g.ny, cut: cutOf(g), supports: p.supports,
+        loads: p.loads.map(({ node, fx, fy }) => ({ node, fx, fy })), frozen: p.frozen || [] };
+      if (itemsError(g, def)) continue;
+      if (!scale(def)) return def;
+    }
+    return null;
+  }
+
+  // ---------- eigene Bauteile (Baukasten) ----------
+  // Rohform: { nx, ny, cells (1 = Feld gehört dazu), supports: [{ kind, side, nodes }], loads: [{ node, deg, kn }],
+  // frozen: [[i0, j0, i1, j1], ...], auto }. auto: alle Lasten gleich groß und so bemessen wie bei den festen Bauteilen.
+  // shape: daraus ein Bauteil wie die festen, ohne Prüfung (bei auto jede Last 1 kN)
+  function shape(raw) {
+    const g = grid(raw.nx, raw.ny, 0);
+    g.c.set(raw.cells);
+    return { nx: g.nx, ny: g.ny, cut: cutOf(g),
+      supports: raw.supports.map(s => s.kind === 'wand' ? wall(s.nodes, s.side) : pin(s.kind, s.nodes[0], s.side)),
+      loads: raw.loads.map(l => { const { node, fx, fy } = load(l.node, l.deg, raw.auto ? 1 : l.kn); return { node, fx, fy }; }),
+      frozen: raw.frozen.slice() };
+  }
+  // build: prüfen und bei auto die Lasten bemessen. Ergebnis { def } oder { error }:
+  // leer, zerfallen, lager, last, knoten, doppelt, beweglich, direkt, stark oder schwach (auto), voll
+  function build(raw) {
+    const g = grid(raw.nx, raw.ny, 0);
+    g.c.set(raw.cells);
+    if (!g.c.some(Boolean)) return { error: 'leer' };
+    if (!connected(g)) return { error: 'zerfallen' };
+    if (!raw.supports.length) return { error: 'lager' };
+    if (!raw.loads.length) return { error: 'last' };
+    const def = { name: 'Eigenes Bauteil', note: 'Selbst gebaut.', ...shape(raw) };
+    const error = itemsError(g, def) || (raw.auto ? scale(def) : check(def));
+    return error ? { error } : { def };
+  }
+  // Code für Link und Wettkampf: Version, Breite und Höhe (Basis 36), Felder (6 Bit je Zeichen); je Lager Art, Seite, i, j;
+  // je Last i, j, Richtung in 45°-Schritten, Betrag in 0,1 kN (drei Zeichen Basis 36); gesperrte Stäbe als Bits in der
+  // Reihenfolge der Stäbe des Bauteils. Beträge stehen im Code fest.
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const SIDES = { L: 'left', R: 'right', T: 'top', B: 'bottom' }, KINDS = { w: 'wand', f: 'fest', l: 'los' };
+  const DEGS = [0, 45, 90, 135, 180, -135, -90, -45];
+  const letter = (map, v) => Object.keys(map).find(k => map[k] === v);
+  const bits = a => { let s = ''; for (let i = 0; i < a.length; i += 6) { let v = 0; for (let b = 0; b < 6; b++) v = v * 2 + (a[i + b] ? 1 : 0); s += B64[v]; } return s; };
+  const unbits = (s, n) => {
+    const out = new Uint8Array(n);
+    for (let i = 0; i < s.length; i++) { const v = B64.indexOf(s[i]); if (v < 0) return null; for (let b = 0; b < 6; b++) if (i * 6 + b < n) out[i * 6 + b] = (v >> (5 - b)) & 1; }
+    return out;
+  };
+  const b36 = n => n.toString(36);
+  function encode(raw) {
+    const L = FEM.level(shape({ ...raw, auto: false })), fz = new Uint8Array(L.nB);
+    for (const f of raw.frozen) { const k = L.barAt(...f); if (k >= 0) fz[k] = 1; }
+    return '1' + b36(raw.nx) + b36(raw.ny) + '.' + bits(raw.cells) + '.' +
+      raw.supports.flatMap(s => s.nodes.map(([i, j]) => letter(KINDS, s.kind) + letter(SIDES, s.side) + b36(i) + b36(j))).join('') + '.' +
+      raw.loads.map(l => b36(l.node[0]) + b36(l.node[1]) + DEGS.indexOf(l.deg) + b36(Math.round(l.kn * 10)).padStart(3, '0')).join('') + '.' +
+      (fz.some(Boolean) ? bits(fz) : '');
+  }
+  function decode(code) {
+    const m = /^1([0-9a-c])([0-9a-c])\.([A-Za-z0-9_-]+)\.((?:[wfl][LRTB][0-9a-c]{2})+)\.((?:[0-9a-c]{2}[0-7][0-9a-z]{3})+)\.([A-Za-z0-9_-]*)$/.exec(String(code));
+    if (!m) return null;
+    const nx = parseInt(m[1], 36), ny = parseInt(m[2], 36);
+    if (!nx || !ny || m[3].length !== Math.ceil(nx * ny / 6)) return null;
+    const cells = unbits(m[3], nx * ny);
+    if (!cells) return null;
+    // aufeinanderfolgende Knoten einer Einspannung, die auf einer Linie aneinandergrenzen, bilden eine Einspannung
+    const supports = [];
+    for (const t of m[4].match(/.{4}/g)) {
+      const kind = KINDS[t[0]], side = SIDES[t[1]], node = [parseInt(t[2], 36), parseInt(t[3], 36)];
+      const g = supports.at(-1), q = g && g.nodes.at(-1), v = side === 'left' || side === 'right';
+      if (kind === 'wand' && g && g.kind === 'wand' && g.side === side && (v ? q[0] === node[0] && Math.abs(q[1] - node[1]) === 1
+        : q[1] === node[1] && Math.abs(q[0] - node[0]) === 1)) g.nodes.push(node);
+      else supports.push({ kind, side, nodes: [node] });
+    }
+    const loads = m[5].match(/.{6}/g).map(t => ({ node: [parseInt(t[0], 36), parseInt(t[1], 36)], deg: DEGS[+t[2]], kn: parseInt(t.slice(3), 36) / 10 }));
+    if (loads.some(l => !(l.kn >= 0.1 && l.kn <= MAX_KN))) return null;
+    const raw = { nx, ny, cells, supports, loads, frozen: [], auto: false };
+    if (m[6]) {
+      const L = FEM.level(shape(raw)), fz = unbits(m[6], L.nB);
+      if (!fz) return null;
+      raw.frozen = L.bars.map((b, k) => fz[k] ? [...b.p, ...b.q] : null).filter(Boolean);
+    }
+    return raw;
+  }
+  // fertiges Bauteil aus einem Code, oder null
+  function fromCode(code) {
+    const raw = decode(code), b = raw && build(raw);
+    if (!b || !b.def) return null;
+    b.def.code = code;
+    return b.def;
+  }
+
+  return { MAX_N, MAX_KN, DIR, DEGS, generate, shape, build, encode, decode, fromCode };
+})(typeof module !== 'undefined' ? require('./fem.js') : FEM);
+if (typeof module !== 'undefined') module.exports = PARTS;
+
 </script>
 <script>
 /* Spiel: Stabwerk zeichnen, als Fachwerk oder Rahmen rechnen, aufdecken, Gegner. Zeichnet auf ein Canvas im Stil einer
@@ -857,11 +1203,16 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   const modeShape = r => r.reason === 'mechanismus' || r.reason === 'stabil';
   // Auslastung in Prozent, um 100 % mit einer Nachkommastelle, damit „hält“ und „versagt“ nie dieselbe Zahl zeigen
   const pct = u => { const x = 100 * u; return fmt(x, x >= 99.5 && x < 100.5 ? 1 : 0); };
+  // Bauteile: die festen (LEVELS), dazu Zufallsbauteile mit Nummer und eigene aus dem Baukasten mit Code
+  const RANDOM = LEVELS.length, CUSTOM = RANDOM + 1;
+  const newNr = () => 1 + Math.floor(Math.random() * 99999);
+  const partName = d => d.nr ? `${d.name} Nr. ${d.nr}` : d.name;
 
   // on: je Stab 0 (kein Stab) oder Profil 1 bis 3. model: Rechenmodell, das gewertet wird; shown: Modell in der
   // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; liveDef, liveUtil: beim Zeichnen
   // Verformung und Auslastung zeigen (einzeln oder zusammen)
-  const st = { li: 0, def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
+  // key: Bauteil für Zwischenspeicher (fest: Nummer, Zufall: z und Nummer, eigenes: b und Code)
+  const st = { li: 0, key: '0', def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
     model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' },
     prof: 1, liveDef: store.get('live-def') !== false, liveUtil: store.get('live-util') === true, liveRef: {},
     hover: null, drag: null, eso: {}, esoRun: null, animId: 0, busy: false };
@@ -882,7 +1233,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // ---------- Geometrie ----------
   const kN = ld => Math.round(Math.hypot(ld.fx, ld.fy) / 100) / 10;
-  const kNtxt = ld => `${fmt(kN(ld), kN(ld) % 1 ? 1 : 0)} kN`;
+  const kNtxt = ld => ld.unknown ? '?' : `${fmt(kN(ld), kN(ld) % 1 ? 1 : 0)} kN`;   // unknown: im Baukasten noch nicht bemessen
   const sameLoads = d => d.loads.every(l => l.fx === d.loads[0].fx && l.fy === d.loads[0].fy);
   const loadText = d => d.loads.length === 1 ? `F = ${kNtxt(d.loads[0])}`
     : sameLoads(d) ? `${d.loads.length} × ${kNtxt(d.loads[0])}` : d.loads.map(kNtxt).join(', ');
@@ -911,9 +1262,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const box = left ? [lab[0] - w, lab[1] - h / 2, lab[0], lab[1] + h / 2] : [lab[0], lab[1] - h / 2, lab[0] + w, lab[1] + h / 2];
     return { u, tip, tail, lab, align: left ? 'right' : 'left', box };
   }
-  // Ränder [oben, rechts, unten, links] und Abstand der Bemaßung [unten, seitlich] in Rasterfeldern. Die Schrift hat eine
-  // Mindestgröße: auf schmalen Bildschirmen ist sie größer als vorgesehen, dann wachsen Ränder und Bemaßungsabstand mit.
+  // Ränder [oben, rechts, unten, links] und Abstand der Bemaßung [unten, seitlich] in Rasterfeldern, right: Höhenmaß rechts.
+  // Die Schrift hat eine Mindestgröße: auf schmalen Bildschirmen ist sie größer als vorgesehen, dann wachsen Ränder und
+  // Bemaßungsabstand mit. Feste Bauteile geben beides vor, bei Zufalls- und eigenen Bauteilen ergibt es sich (autoFrame).
   function frame(s) {
+    if (!st.def.margin) return autoFrame(s);
     const d = st.def, ex = fontPx(s) / s - 0.2, m = d.margin.slice();
     if (!labelBelow(d)) for (const ld of d.loads) {
       const g = loadGeom(ld, s);
@@ -924,20 +1277,40 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     }
     const rows = labelBelow(d) ? 2 : 1, side = d.dimSide === 'right' ? 1 : 3;
     m[2] += rows * ex; m[side] += ex;
-    return { m, dim: [d.dim[0] + rows * ex, d.dim[1]] };
+    return { m, dim: [d.dim[0] + rows * ex, d.dim[1]], right: d.dimSide === 'right' };
+  }
+  // Wie weit Lager und Lastpfeile samt Beschriftung über das Raster hinausragen, [oben, rechts, unten, links]. Darunter die
+  // Bemaßung, das Höhenmaß auf der Seite, an der weniger übersteht.
+  function autoFrame(s) {
+    const d = st.def, f = fontPx(s) / s, e = [0, 0, 0, 0], below = labelBelow(d);
+    const grow = (x, y) => { e[0] = Math.max(e[0], y - d.ny); e[1] = Math.max(e[1], x - d.nx); e[2] = Math.max(e[2], -y); e[3] = Math.max(e[3], -x); };
+    for (const sp of d.supports) {   // Maße der Symbole siehe drawSupport
+      const [ox, oy] = OUT[sp.side], t = [Math.abs(oy), Math.abs(ox)];
+      const out = sp.kind === 'wand' ? 0.2 : sp.kind === 'los' ? 0.65 : 0.55, half = sp.kind === 'wand' ? 0.5 : 0.4;
+      for (const [i, j] of sp.nodes) for (const k of [-1, 1]) grow(i + ox * out + t[0] * half * k, j + oy * out + t[1] * half * k);
+    }
+    for (const ld of d.loads) {
+      const g = loadGeom(ld, s);
+      grow(...g.tip); grow(...g.tail);
+      if (!below) { grow(g.box[0], g.box[1]); grow(g.box[2], g.box[3]); }
+    }
+    if (below) { const t = loadGeom(d.loads[Math.floor(d.loads.length / 2)], s).tip; grow(t[0], t[1] - 0.15 - f); }
+    const right = e[1] < e[3], m = e.map(x => x + 0.3), dim = [e[2] + f + 0.3, (right ? e[1] : e[3]) + 0.35];
+    m[2] = dim[0] + 0.35; m[right ? 1 : 3] = dim[1] + f + 0.3;
+    return { m, dim, right };
   }
   function layout() {
     const pad = mp.on ? 58 : 0;   // im Wettkampf steht oben links die Uhr: Zeichnung darunter beginnen
     const d = st.def, W = wrap.clientWidth, maxH = Math.max(260, Math.min(innerHeight * 0.62, 640)) - pad;
     if (!W) return;
     const fit = m => Math.min(W / (d.nx + m[3] + m[1]), maxH / (d.ny + m[0] + m[2]));
-    let s = fit(d.margin), F;
+    let s = fit(d.margin || [1, 1, 1.5, 1.5]), F;
     for (let pass = 0; pass < 3; pass++) { F = frame(s); s = fit(F.m); }
     const [mt, mr, mb, ml] = F.m, H = Math.round(s * (d.ny + mt + mb)) + pad, dpr = devicePixelRatio || 1;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    G = { s, W, H, ox: (W - s * (d.nx + ml + mr)) / 2 + s * ml, oy: s * (mt + d.ny) + pad, dim: F.dim };
+    G = { s, W, H, ox: (W - s * (d.nx + ml + mr)) / 2 + s * ml, oy: s * (mt + d.ny) + pad, dim: F.dim, right: F.right };
   }
   const P = ([i, j]) => [G.ox + i * G.s, G.oy - j * G.s];   // Rasterpunkt in Pixel
   const bw = () => Math.max(2.5, G.s * 0.055);
@@ -974,7 +1347,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   // sehr weiche und bewegliche Entwürfe laufen sanft gegen die Obergrenze DEFO_LIVE_MAX
   function liveScale(r) {
     if (!r.disp) return 0;
-    const key = st.li + '-' + r.model, cap = DEFO_LIVE_MAX * size();
+    const key = st.key + '-' + r.model, cap = DEFO_LIVE_MAX * size();
     if (!st.liveRef[key]) st.liveRef[key] = DEFO_LIVE * size() / maxDisp(FEM.analyze(st.L, Uint8Array.from(st.L.domain, () => 2), r.model));
     const m = maxDisp(r);
     return m ? cap * Math.tanh(m * st.liveRef[key] / cap) / m : st.liveRef[key];
@@ -988,6 +1361,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   function render() {
     if (!G) return;
     ctx.clearRect(0, 0, G.W, G.H);
+    if (st.phase === 'edit') { drawEditor(); drawSupports(); drawLoads({}); drawEditTool(); return; }
     drawGround();
     drawSupports();
     if (st.view.mode === 'blind') drawBars(st.on, st.conn, st.model);
@@ -1163,39 +1537,40 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
   function drawSupports() {
-    const s = G.s;
     ctx.save(); ctx.strokeStyle = C.ink; ctx.fillStyle = C.sheet;
-    for (const sp of st.def.supports) {
-      const n = OUT[sp.side];
-      if (sp.kind === 'wand') {
-        // Wandlinie über die eingespannten Knoten hinaus, Schraffur nach außen
-        const t = [Math.abs(n[1]), Math.abs(n[0])], key = q => q[0] * t[0] + q[1] * t[1];
-        const ns = sp.nodes.slice().sort((p, q) => key(p) - key(q)), a = ns[0], b = ns.at(-1);
-        let A = P([a[0] - t[0] * 0.3, a[1] - t[1] * 0.3]), B = P([b[0] + t[0] * 0.3, b[1] + t[1] * 0.3]);
-        if (A[1] > B[1]) [A, B] = [B, A];
-        ctx.lineWidth = Math.max(2, s * 0.04); ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.stroke();
-        const len = Math.hypot(B[0] - A[0], B[1] - A[1]), hs = s * 0.18, hx = (n[0] + Math.abs(n[1])) * hs, hy = (Math.abs(n[0]) - n[1]) * hs;
-        ctx.lineWidth = 1; ctx.beginPath();
-        for (let q = 0; q < len; q += s * 0.12) {
-          const x = A[0] + (B[0] - A[0]) * q / len, y = A[1] + (B[1] - A[1]) * q / len;
-          ctx.moveTo(x, y); ctx.lineTo(x + hx, y + hy);
-        }
-        ctx.stroke();
-      } else for (const node of sp.nodes) {
-        const [cx, cy] = P(node), h = s * 0.42, w = s * 0.5;
-        ctx.save(); ctx.translate(cx, cy); ctx.rotate({ bottom: 0, top: Math.PI, right: -Math.PI / 2, left: Math.PI / 2 }[sp.side]);
-        ctx.lineWidth = Math.max(1.5, s * 0.025);
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-w / 2, h); ctx.lineTo(w / 2, h); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        const gy = h + (sp.kind === 'los' ? s * 0.1 : 0);
-        ctx.beginPath(); ctx.moveTo(-w * 0.75, gy); ctx.lineTo(w * 0.75, gy); ctx.stroke();
-        ctx.lineWidth = 1; ctx.beginPath();
-        for (let x = -w * 0.75; x < w * 0.75; x += s * 0.1) { ctx.moveTo(x + s * 0.1, gy); ctx.lineTo(x, gy + s * 0.1); }
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
+    for (const sp of st.def.supports) drawSupport(sp);
     ctx.restore();
+  }
+  // ein Lager in der aktuellen Strichfarbe (im Baukasten auch als Vorschau)
+  function drawSupport(sp) {
+    const s = G.s, n = OUT[sp.side];
+    if (sp.kind === 'wand') {
+      // Wandlinie über die eingespannten Knoten hinaus, Schraffur nach außen
+      const t = [Math.abs(n[1]), Math.abs(n[0])], key = q => q[0] * t[0] + q[1] * t[1];
+      const ns = sp.nodes.slice().sort((p, q) => key(p) - key(q)), a = ns[0], b = ns.at(-1);
+      let A = P([a[0] - t[0] * 0.3, a[1] - t[1] * 0.3]), B = P([b[0] + t[0] * 0.3, b[1] + t[1] * 0.3]);
+      if (A[1] > B[1]) [A, B] = [B, A];
+      ctx.lineWidth = Math.max(2, s * 0.04); ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.stroke();
+      const len = Math.hypot(B[0] - A[0], B[1] - A[1]), hs = s * 0.18, hx = (n[0] + Math.abs(n[1])) * hs, hy = (Math.abs(n[0]) - n[1]) * hs;
+      ctx.lineWidth = 1; ctx.beginPath();
+      for (let q = 0; q < len; q += s * 0.12) {
+        const x = A[0] + (B[0] - A[0]) * q / len, y = A[1] + (B[1] - A[1]) * q / len;
+        ctx.moveTo(x, y); ctx.lineTo(x + hx, y + hy);
+      }
+      ctx.stroke();
+    } else for (const node of sp.nodes) {
+      const [cx, cy] = P(node), h = s * 0.42, w = s * 0.5;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate({ bottom: 0, top: Math.PI, right: -Math.PI / 2, left: Math.PI / 2 }[sp.side]);
+      ctx.lineWidth = Math.max(1.5, s * 0.025);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-w / 2, h); ctx.lineTo(w / 2, h); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      const gy = h + (sp.kind === 'los' ? s * 0.1 : 0);
+      ctx.beginPath(); ctx.moveTo(-w * 0.75, gy); ctx.lineTo(w * 0.75, gy); ctx.stroke();
+      ctx.lineWidth = 1; ctx.beginPath();
+      for (let x = -w * 0.75; x < w * 0.75; x += s * 0.1) { ctx.moveTo(x + s * 0.1, gy); ctx.lineTo(x, gy + s * 0.1); }
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // Lastpfeile (siehe loadGeom); sie wandern mit der Verformung. Gleiche Lasten bekommen eine gemeinsame Beschriftung.
@@ -1223,7 +1598,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // Gesamtmaße unten und links (oder rechts), in mm
   function drawDims() {
-    const d = st.def, s = G.s, a = Math.max(5, s * 0.1), right = d.dimSide === 'right';
+    const d = st.def, s = G.s, a = Math.max(5, s * 0.1), right = G.right;
     const x0 = G.ox, x1 = G.ox + d.nx * s, y0 = G.oy, yt = G.oy - d.ny * s, yd0 = G.oy + G.dim[0] * s;
     const xe = right ? x1 : x0, sx = right ? 1 : -1, xd0 = xe + sx * G.dim[1] * s;
     const head = (x, y, ux, uy) => {
@@ -1278,27 +1653,35 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   const legend = on => { $('legend').hidden = !on; };
 
   function panel() {
+    if (st.phase === 'edit') return edPanel();
     const L = st.L, d = st.def, e = esoNow(), eso = st.phase === 'eso' && e;
     const on = eso ? e.on : st.on, conn = eso ? e.res.conn : st.conn;
-    $('tb-name').textContent = d.name;
+    $('tb-name').textContent = partName(d);
     $('tb-load').textContent = loadText(d);
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
     $('tb-bars').textContent = `${count(conn)}: ${profText(Uint8Array.from(on, (x, k) => conn[k] ? x : 0))}`;
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
     $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
     const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
-    $('tb-sheet').textContent = mp.on ? (rid ? `Runde ${rid}` : 'Warteraum') : `${st.li + 1} von ${LEVELS.length}`;
+    $('tb-sheet').textContent = mp.on ? (rid ? `Runde ${rid}` : 'Warteraum')
+      : st.li === RANDOM ? 'Zufallsbauteil' : st.li === CUSTOM ? 'Baukasten' : `${st.li + 1} von ${LEVELS.length}`;
   }
 
   function controls() {
-    const design = st.phase === 'design' || st.phase === 'probe';
+    const design = st.phase === 'design' || st.phase === 'probe', edit = st.phase === 'edit';
     $('act-design').hidden = !design;
-    $('act-result').hidden = design;
+    $('act-result').hidden = design || edit;
+    // Baukasten: Werkzeuge, Spielen, dazu Richtung und Betrag der gewählten Last; Profile, Modell und Live-Ansicht ruhen
+    $('act-edit').hidden = $('etools').hidden = $('howto-edit').hidden = !edit;
+    $('ledit').hidden = !(edit && ed.tool === 'last' && ed.loads.length);
+    $('model-row').hidden = $('live-row').hidden = edit;
+    if (!mp.on) $('profiles').hidden = $('howto').hidden = edit;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
       $('b-probe').disabled = !st.probes || st.liveUtil;
       $('b-undo').disabled = !st.undo.length;
       $('b-eso').disabled = !esoNow();
+      $('b-play').disabled = !(edit && ed.res && ed.res.def);
     }
     $('b-probe').textContent = `Probe-Rechnung (${st.probes})`;
     $('b-eso').textContent = st.phase === 'eso' ? 'Mein Ergebnis' : 'Lösung des Algorithmus';
@@ -1310,7 +1693,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     $('g-truss').setAttribute('aria-pressed', String(m === 'truss'));
     $('g-frame').setAttribute('aria-pressed', String(m === 'frame'));
     $('g-truss').disabled = $('g-frame').disabled = st.busy;
-    cv.classList.toggle('locked', !design);
+    cv.classList.toggle('locked', !design && !edit);
   }
 
   // Nach jeder Änderung im Entwurf
@@ -1339,13 +1722,20 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     panel(); controls(); render(); mpRender();
   }
 
-  function loadLevel(i) {
+  // i: festes Bauteil, RANDOM mit Nummer oder CUSTOM mit Code als arg
+  function loadLevel(i, arg) {
     st.animId++;
-    st.li = i; st.def = LEVELS[i]; st.L = FEM.level(st.def);
+    let def = i === RANDOM ? PARTS.generate(arg) : i === CUSTOM ? PARTS.fromCode(arg) : LEVELS[i];
+    if (!def) { i = 0; def = LEVELS[0]; }
+    st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def);
     st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false;
     st.drag = null; st.hover = null;
     $('stamp').hidden = true;
     document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
+    // Zufalls- und eigene Bauteile im Link festhalten, damit man sie wiederholen oder weitergeben kann (Raumcodes bleiben)
+    if (!mp.on && (i >= RANDOM || /^#(nr|bau)-/.test(location.hash))) {
+      try { history.replaceState(null, '', def.nr ? '#nr-' + def.nr : def.code ? '#bau-' + def.code : location.pathname + location.search); } catch {}
+    }
     layout(); refresh(); startEso();
   }
 
@@ -1393,11 +1783,13 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     requestAnimationFrame(step);
   }
 
+  // Stempel unten rechts, wenn oben rechts Stäbe stehen und unten rechts frei ist (feste Bauteile sagen es selbst)
+  const stampLow = () => { const d = st.def; return d.margin ? d.stamp === 'unten' : inDomain(d.nx - 0.5, d.ny - 0.5) && !inDomain(d.nx - 0.5, 0.5); };
   function stamp(ok) {
     const el = $('stamp');
     if (!el.hidden) return;
     el.textContent = ok ? 'HÄLT' : 'BRUCH';
-    el.className = 'stamp ' + (ok ? 'ok' : 'bad') + (st.def.stamp === 'unten' ? ' unten' : '') + (reduce ? '' : ' hit');
+    el.className = 'stamp ' + (ok ? 'ok' : 'bad') + (stampLow() ? ' unten' : '') + (reduce ? '' : ' hit');
     el.hidden = false;
   }
 
@@ -1470,7 +1862,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // Umschalten des Modells: im Entwurf das gewertete Modell, nach dem Abgeben nur die Ansicht
   function setModel(m) {
-    if (st.busy) return;
+    if (st.busy || st.phase === 'edit') return;
     if (st.phase === 'design' || st.phase === 'probe') {
       if (m === st.model) return;
       st.model = m; store.set('model', m);
@@ -1498,7 +1890,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   }
 
   // ---------- Algorithmus ----------
-  const esoKey = () => st.li + '-' + st.model;
+  const esoKey = () => st.key + '-' + st.model;
   const esoNow = () => st.eso[esoKey()];
   function showEso() {
     const e = esoNow(), m = st.shown;
@@ -1531,6 +1923,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       let s;
       do s = gen.next(); while (!s.done && performance.now() - t0 < 12);
       if (!s.done) return void setTimeout(pump, 0);
+      // von Zufalls- und eigenen Bauteilen nur das aktuelle behalten (Schlüssel: Bauteil, Bindestrich, Modell)
+      const part = k => k.slice(0, k.lastIndexOf('-'));
+      for (const k in st.eso) if ((k[0] === 'z' || k[0] === 'b') && part(k) !== part(key)) delete st.eso[k];
       st.eso[key] = s.value; st.esoRun = null;
       if (esoKey() === key && st.phase === 'result' && !st.busy) verdict();
       controls();
@@ -1538,10 +1933,347 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     setTimeout(pump, 300);
   }
 
+  // ---------- Baukasten ----------
+  // Raster aus Feldern; Lager an Randknoten (Schlüssel "i,j", Art und Seite), Lasten an Knoten, gesperrte Stäbe (Schlüssel
+  // "i0,j0,i1,j1"). loads: [{ node, deg, kn }], sel: gewählte Last, auto: alle Lasten gleich groß und automatisch bemessen,
+  // code: zu welchem eigenen Bauteil der Stand gehört
+  const ED_NX = PARTS.MAX_N, ED_NY = 8;
+  const ed = { cells: null, sup: new Map(), loads: [], frozen: new Set(), sel: -1, auto: true, code: '', tool: 'raster',
+    drag: null, hover: null, raw: null, res: null };
+  const ED_MSG = {
+    leer: 'Noch kein Raster: Mit „Raster“ ein Rechteck aufziehen.',
+    zerfallen: 'Das Raster zerfällt in mehrere Teile. Alle Felder müssen über Knoten zusammenhängen.',
+    lager: 'Es fehlt ein Lager: Einspannung, Festlager oder Loslager an einen Randknoten setzen.',
+    last: 'Es fehlt eine Last: Mit „Last“ auf einen Knoten klicken.',
+    knoten: 'Lager und Lasten müssen an Knoten des Rasters sitzen.',
+    doppelt: 'An einem Knoten sitzen zwei Lager oder zwei Lasten.',
+    beweglich: 'So kann sich selbst das volle Raster noch bewegen. Lager ergänzen: Ein Festlager hält in beide Richtungen, ein Loslager nur senkrecht zu seiner Auflage.',
+    direkt: 'Die Last sitzt direkt auf einem Lager und geht ohne Umweg hinein. Last an einen anderen Knoten setzen.',
+    stark: 'Die Last läge über 200 kN, so viel trägt das volle Raster hier. Last weiter weg vom Lager setzen.',
+    schwach: 'Die Last läge unter 0,5 kN, so weich ist das volle Raster hier. Raster höher machen oder die Last näher ans Lager setzen.',
+    voll: 'Schon das volle Raster im mittleren Profil hält diese Lasten nicht, als Fachwerk oder als Rahmen. Beträge verringern oder „Beträge automatisch“ wählen.',
+  };
+  const nk = (i, j) => i + ',' + j;
+  const edHas = (x, y) => x >= 0 && y >= 0 && x < ED_NX && y < ED_NY && ed.cells[x + y * ED_NX] === 1;
+  const edNode = (i, j) => edHas(i, j) || edHas(i - 1, j) || edHas(i, j - 1) || edHas(i - 1, j - 1);
+  // Seiten, zu denen ein Knoten frei liegt (dort kein Feld), in der Reihenfolge, die bei Gleichstand gewinnt
+  function freeSides(i, j) {
+    const free = { bottom: !edHas(i - 1, j - 1) && !edHas(i, j - 1), left: !edHas(i - 1, j - 1) && !edHas(i - 1, j),
+      right: !edHas(i, j - 1) && !edHas(i, j), top: !edHas(i - 1, j) && !edHas(i, j) };
+    return Object.keys(free).filter(k => free[k]);
+  }
+  const barKey = (i0, j0, i1, j1) => i0 < i1 || (i0 === i1 && j0 < j1) ? [i0, j0, i1, j1].join(',') : [i1, j1, i0, j0].join(',');
+  const keyPts = k => { const [a, b, c, e] = k.split(',').map(Number); return [P([a, b]), P([c, e])]; };
+  // Stab gehört zum Raster: ein Feld daneben, bei der Diagonale ihr Feld
+  function edBar(k) {
+    const [a, b, c, e] = k.split(',').map(Number), x = Math.min(a, c), y = Math.min(b, e);
+    return a !== c && b !== e ? edHas(x, y) : b === e ? edHas(x, y) || edHas(x, y - 1) : edHas(x, y) || edHas(x - 1, y);
+  }
+
+  // Erster Aufruf oder von einem anderen Bauteil aus: dieses Bauteil zum Abwandeln übernehmen
+  function openEditor() {
+    st.animId++; st.esoRun = null;   // der Gegner ruht beim Bauen
+    if (!ed.cells || st.li !== CUSTOM || (st.def.code && st.def.code !== ed.code)) edFrom(st.def);
+    Object.assign(st, { li: CUSTOM, phase: 'edit', busy: false, drag: null, hover: null });
+    $('stamp').hidden = true; legend(false); $('femline').textContent = '';
+    document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === CUSTOM)));
+    edUpdate();
+  }
+  function edFrom(d) {
+    const ox = Math.max(0, (ED_NX - d.nx) >> 1), oy = Math.max(0, (ED_NY - d.ny) >> 1);
+    const cut = new Set((d.cut || []).map(([x, y]) => x + ',' + y));
+    ed.cells = new Uint8Array(ED_NX * ED_NY);
+    for (let y = 0; y < d.ny; y++) for (let x = 0; x < d.nx; x++)
+      if (!cut.has(x + ',' + y) && x + ox < ED_NX && y + oy < ED_NY) ed.cells[x + ox + (y + oy) * ED_NX] = 1;
+    ed.sup = new Map();
+    for (const sp of d.supports) for (const [i, j] of sp.nodes) ed.sup.set(nk(i + ox, j + oy), { kind: sp.kind, side: sp.side });
+    ed.loads = d.loads.map(ld => {
+      const deg = Math.round(Math.atan2(ld.fy, ld.fx) / (Math.PI / 4)) * 45;
+      return { node: [ld.node[0] + ox, ld.node[1] + oy], deg: deg === -180 ? 180 : deg, kn: kN(ld) };
+    });
+    ed.frozen = new Set((d.frozen || []).map(([a, b, c, e]) => barKey(a + ox, b + oy, c + ox, e + oy)));
+    ed.sel = ed.loads.length - 1;
+    ed.auto = !d.code;   // eigene Bauteile behalten ihre Beträge, die übrigen werden neu bemessen
+    ed.code = d.code || '';
+  }
+  // Rohform für PARTS, auf Wunsch auf das umschließende Rechteck zugeschnitten
+  function edRaw(trim) {
+    let x0 = 0, y0 = 0, nx = ED_NX, ny = ED_NY;
+    if (trim) {
+      let x1 = -1, y1 = -1;
+      x0 = ED_NX; y0 = ED_NY;
+      for (let k = 0; k < ed.cells.length; k++) if (ed.cells[k]) {
+        const x = k % ED_NX, y = (k - x) / ED_NX;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      if (x1 < 0) return { nx: 1, ny: 1, cells: new Uint8Array(1), supports: [], loads: [], frozen: [], auto: ed.auto };
+      nx = x1 - x0 + 1; ny = y1 - y0 + 1;
+    }
+    const cells = new Uint8Array(nx * ny);
+    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) cells[x + y * nx] = ed.cells[x + x0 + (y + y0) * ED_NX];
+    const sup = [...ed.sup].map(([key, s]) => { const [i, j] = key.split(',').map(Number); return { ...s, node: [i - x0, j - y0] }; });
+    // Einspannungen: aneinandergrenzende Knoten derselben Seite auf einer Linie bilden eine Einspannung
+    const vert = side => side === 'left' || side === 'right';
+    const walls = sup.filter(s => s.kind === 'wand').sort((a, b) => a.side.localeCompare(b.side)
+      || (vert(a.side) ? a.node[0] - b.node[0] || a.node[1] - b.node[1] : a.node[1] - b.node[1] || a.node[0] - b.node[0]));
+    const runs = [];
+    for (const { side, node: [i, j] } of walls) {
+      const r = runs.at(-1), q = r && r.nodes.at(-1);
+      if (r && r.side === side && (vert(side) ? q[0] === i && q[1] + 1 === j : q[1] === j && q[0] + 1 === i)) r.nodes.push([i, j]);
+      else runs.push({ kind: 'wand', side, nodes: [[i, j]] });
+    }
+    return { nx, ny, cells, auto: ed.auto,
+      supports: [...runs, ...sup.filter(s => s.kind !== 'wand').map(s => ({ kind: s.kind, side: s.side, nodes: [s.node] }))],
+      loads: ed.loads.map(l => ({ node: [l.node[0] - x0, l.node[1] - y0], deg: l.deg, kn: l.kn })),
+      frozen: [...ed.frozen].map(k => { const [a, b, c, e] = k.split(',').map(Number); return [a - x0, b - y0, c - x0, e - y0]; }) };
+  }
+  // Nach jeder Änderung: was nicht mehr am Raster sitzt entfernen, prüfen, Lasten bemessen, zeichnen
+  function edUpdate() {
+    for (const [key, s] of [...ed.sup]) {
+      const [i, j] = key.split(',').map(Number);
+      if (!edNode(i, j) || !freeSides(i, j).includes(s.side)) ed.sup.delete(key);
+    }
+    ed.loads = ed.loads.filter(l => edNode(...l.node));
+    for (const k of [...ed.frozen]) if (!edBar(k)) ed.frozen.delete(k);
+    if (ed.sel < 0 || ed.sel >= ed.loads.length) ed.sel = ed.loads.length - 1;
+    ed.raw = edRaw(true);
+    ed.res = PARTS.build(ed.raw);
+    const d = ed.res.def;
+    if (d && ed.auto) {   // berechnete Beträge übernehmen: Anzeige, Code und Ausgangswerte ohne Automatik
+      d.loads.forEach((l, i) => { ed.loads[i].kn = kN(l); });
+      ed.raw = edRaw(true);
+    }
+    // feste Ränder, damit beim Bauen nichts springt
+    const view = Object.assign(PARTS.shape({ ...edRaw(false), auto: false }), { name: 'Eigenes Bauteil', note: '', margin: [0.9, 1.6, 1.3, 1.6], dim: [1, 1] });
+    if (ed.auto && !d) for (const l of view.loads) l.unknown = true;
+    st.def = view; st.L = FEM.level(view);
+    const ready = d && (ed.auto ? `${ed.loads.length > 1 ? 'Die Lasten sind' : 'Die Last ist'} so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu ${pct(d.util)} % ausgelastet ist.`
+      : `Das volle Raster im mittleren Profil ist als Fachwerk zu ${pct(d.util)} % ausgelastet.`);
+    $('verdict').innerHTML = `<p>${d ? `<span class="t-ok">Bereit.</span> ${ready} „Spielen“ startet das Bauteil.` : ED_MSG[ed.res.error] || ''}</p>`;
+    ledRender();
+    layout(); panel(); controls(); render();
+  }
+  // Feld für die gewählte Last: Nummer, Richtung, Betrag (bei Automatik nur zur Anzeige)
+  function ledRender() {
+    const l = ed.loads[ed.sel];
+    $('l-auto').checked = ed.auto;
+    if (!l) return;
+    $('l-name').textContent = ed.loads.length > 1 ? `Last ${ed.sel + 1} von ${ed.loads.length}` : 'Last';
+    for (const b of $('l-dirs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(+b.dataset.deg === l.deg));
+    $('l-kn').value = String(l.kn);
+    $('l-kn').disabled = ed.auto;
+  }
+  function edPanel() {
+    const d = ed.res && ed.res.def, n = count(ed.cells);
+    $('tb-name').textContent = 'Eigenes Bauteil';
+    $('tb-load').textContent = d ? loadText(d) : 'noch offen';
+    $('tb-size').textContent = n ? `${ed.raw.nx} × ${ed.raw.ny} m, Raster 1 m` : 'noch offen';
+    $('tb-bars').textContent = n ? `${st.L.nB} möglich` : 'keine';
+    $('tb-mass').textContent = `${fmt(kg(startOn(st.L), st.L.frozen))} kg`;
+    $('tb-probe').textContent = '1 übrig';
+    $('tb-sheet').textContent = 'Baukasten';
+  }
+
+  // Platz im Baukasten als feines Raster, die Felder des Bauteils getönt mit ihren möglichen Stäben, gesperrte Stäbe wie im
+  // Spiel
+  function drawEditor() {
+    const s = G.s, L = st.L;
+    ctx.save();
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = 0; x <= ED_NX; x++) { ctx.moveTo(G.ox + x * s, G.oy); ctx.lineTo(G.ox + x * s, G.oy - ED_NY * s); }
+    for (let y = 0; y <= ED_NY; y++) { ctx.moveTo(G.ox, G.oy - y * s); ctx.lineTo(G.ox + ED_NX * s, G.oy - y * s); }
+    ctx.stroke();
+    ctx.fillStyle = C.grid;
+    for (let y = 0; y < ED_NY; y++) for (let x = 0; x < ED_NX; x++) if (edHas(x, y)) ctx.fillRect(G.ox + x * s, G.oy - (y + 1) * s, s, s);
+    ctx.strokeStyle = C.rule; ctx.beginPath();
+    for (const b of L.bars) line([P(b.p), P(b.q)]);
+    ctx.stroke();
+    ctx.fillStyle = C.ink2;
+    for (let n = 0; n < L.nN; n++) if (L.ij[n]) { const [x, y] = P(L.ij[n]); ctx.fillRect(x - 1.5, y - 1.5, 3, 3); }
+    ctx.lineCap = 'round';
+    for (const k of ed.frozen) { strokeBar(keyPts(k), bwOf(1) + 2.5, C.ink); strokeBar(keyPts(k), bwOf(1), C.steel2); }
+    ctx.restore();
+  }
+  // Vorschau des Werkzeugs über allem (rot: nimmt weg)
+  function drawEditTool() {
+    const s = G.s, d = ed.drag, h = ed.hover, t = ed.tool;
+    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = C.accent; ctx.lineWidth = 2;
+    const ring = ([i, j], w = 2) => { const [x, y] = P([i, j]); ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, Math.max(7, s * 0.14), 0, 7); ctx.stroke(); };
+    if (t === 'raster' && d) {
+      const x0 = Math.min(d.a[0], d.b[0]), x1 = Math.max(d.a[0], d.b[0]), y0 = Math.min(d.a[1], d.b[1]), y1 = Math.max(d.a[1], d.b[1]);
+      const r = [G.ox + x0 * s, G.oy - (y1 + 1) * s, (x1 - x0 + 1) * s, (y1 - y0 + 1) * s];
+      ctx.globalAlpha = 0.4; ctx.fillStyle = d.v ? C.accent : C.sheet; ctx.fillRect(...r);
+      ctx.globalAlpha = 1; ctx.setLineDash([6, 4]); ctx.strokeStyle = d.v ? C.accent : C.bad; ctx.strokeRect(...r); ctx.setLineDash([]);
+    } else if (t === 'raster' && h) ctx.strokeRect(G.ox + h.cell[0] * s + 1, G.oy - (h.cell[1] + 1) * s + 1, s - 2, s - 2);
+    else if (t === 'sperre') {
+      const keys = d ? (d.moved ? edLine(d) : []) : h ? [h.bar] : [];
+      const off = keys.length && ed.frozen.has(keys[0]);
+      ctx.globalAlpha = 0.85; if (d) ctx.setLineDash([6, 4]);
+      for (const k of keys) strokeBar(keyPts(k), bwOf(1), off ? C.bad : C.accent);
+    } else if (t === 'last') {
+      if (d) ring(d.a); else if (h) ring(h.node);
+      if (ed.loads[ed.sel]) ring(ed.loads[ed.sel].node, 3.5);   // gewählte Last
+    } else if (d || h) {   // Lager: Vorschau des Symbols an der Seite, die der Zeiger anzeigt
+      const q = d || h, nodes = t === 'wand' && d ? edRun(d) : [q.a || q.node];
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = nodes.every(n => edSame(n, t, q.side)) ? C.bad : C.accent; ctx.fillStyle = C.sheet;
+      drawSupport({ kind: t, side: q.side, nodes });
+    }
+    ctx.restore();
+  }
+
+  const edPos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left - G.ox) / G.s, (G.oy - e.clientY + b.top) / G.s]; };
+  const edCell = ([x, y]) => [Math.max(0, Math.min(ED_NX - 1, Math.floor(x))), Math.max(0, Math.min(ED_NY - 1, Math.floor(y)))];
+  // Knoten des Rasters am Zeiger (tol in Feldern), sonst null
+  const edNodeAt = ([x, y], tol) => {
+    const i = Math.round(x), j = Math.round(y);
+    return Math.hypot(x - i, y - j) <= tol && edNode(i, j) ? [i, j] : null;
+  };
+  // Lagerseite: die freie Seite (wahlweise nur aus only), zu der der Zeiger vom Knoten aus zeigt
+  function sideAt([x, y], [i, j], only) {
+    const lean = { bottom: j - y, left: i - x, right: x - i, top: y - j };
+    return freeSides(i, j).filter(s => !only || only.includes(s)).reduce((a, b) => !a || lean[b] > lean[a] ? b : a, '');
+  }
+  const edSame = (q, kind, side) => { const s = ed.sup.get(nk(...q)); return !!s && s.kind === kind && s.side === side; };
+  // Einspannung über mehrere Knoten: von a bis b auf einer Linie entlang der Lagerseite, alle zu dieser Seite frei
+  function edRun(d) {
+    const v = d.side === 'left' || d.side === 'right', [ai, aj] = d.a, out = [d.a];
+    if (v ? d.b[0] !== ai : d.b[1] !== aj) return out;
+    const n = v ? d.b[1] - aj : d.b[0] - ai, dir = Math.sign(n);
+    for (let t = dir; dir && Math.abs(t) <= Math.abs(n); t += dir) {
+      const q = v ? [ai, aj + t] : [ai + t, aj];
+      if (!edNode(...q) || !freeSides(...q).includes(d.side)) break;
+      out.push(q);
+    }
+    return out;
+  }
+  // gesperrte Stäbe entlang einer gezogenen Linie von Knoten zu Knoten (waagrecht, senkrecht, 45°), wie beim Zeichnen
+  function edLine(d) {
+    const a = [Math.round(d.p0[0]), Math.round(d.p0[1])], dx = d.p1[0] - a[0], dy = d.p1[1] - a[1];
+    const o = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)), u = [Math.round(Math.cos(o * Math.PI / 4)), Math.round(Math.sin(o * Math.PI / 4))];
+    const n = Math.max(0, Math.round(u[0] && u[1] ? (Math.abs(dx) + Math.abs(dy)) / 2 : Math.abs(u[0] ? dx : dy))), out = [];
+    for (let t = 0; t < n; t++) {
+      const k = st.L.barAt(a[0] + u[0] * t, a[1] + u[1] * t, a[0] + u[0] * (t + 1), a[1] + u[1] * (t + 1));
+      if (k >= 0) out.push(barKey(...st.L.bars[k].p, ...st.L.bars[k].q));
+    }
+    return out;
+  }
+  function edBarNear([x, y], tol) {
+    let best = null, bd = tol;
+    for (const b of st.L.bars) {
+      const [x0, y0] = b.p, dx = b.q[0] - x0, dy = b.q[1] - y0, t = clamp01(((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy));
+      const dd = Math.hypot(x - x0 - t * dx, y - y0 - t * dy);
+      if (dd < bd) { bd = dd; best = barKey(...b.p, ...b.q); }
+    }
+    return best;
+  }
+  function edHoverAt(p) {
+    const t = ed.tool;
+    if (t === 'raster') return { cell: edCell(p) };
+    if (t === 'sperre') { const k = edBarNear(p, 0.2); return k && { bar: k }; }
+    const n = edNodeAt(p, 0.35), side = n && t !== 'last' ? sideAt(p, n) : '';
+    return n && (t === 'last' || side) ? { node: n, side } : null;
+  }
+  function edApply(d) {
+    const t = ed.tool;
+    if (t === 'raster') {
+      for (let y = Math.min(d.a[1], d.b[1]); y <= Math.max(d.a[1], d.b[1]); y++)
+        for (let x = Math.min(d.a[0], d.b[0]); x <= Math.max(d.a[0], d.b[0]); x++) ed.cells[x + y * ED_NX] = d.v;
+    } else if (t === 'sperre') {
+      const keys = d.moved ? edLine(d) : [edBarNear(d.p0, d.touch ? 0.3 : 0.2)].filter(Boolean);
+      if (!keys.length) return false;
+      const off = ed.frozen.has(keys[0]);
+      for (const k of keys) if (off) ed.frozen.delete(k); else ed.frozen.add(k);
+    } else if (t === 'last') {   // Klick auf eine Last wählt sie, ein weiterer dreht sie im Uhrzeigersinn; sonst kommt eine Last dazu
+      const i = ed.loads.findIndex(l => l.node[0] === d.a[0] && l.node[1] === d.a[1]);
+      if (i < 0) { ed.loads.push({ node: d.a.slice(), deg: -90, kn: ed.loads[ed.sel] ? ed.loads[ed.sel].kn : 10 }); ed.sel = ed.loads.length - 1; }
+      else if (i !== ed.sel) ed.sel = i;
+      else { const TURN = [-90, -135, 180, 135, 90, 45, 0, -45], l = ed.loads[i]; l.deg = TURN[(TURN.indexOf(l.deg) + 1) % 8]; }
+    } else {   // Lager: gleiches Lager an gleicher Seite nimmt es weg, sonst ersetzt es, was dort war
+      const nodes = t === 'wand' ? edRun(d) : [d.a], off = nodes.every(q => edSame(q, t, d.side));
+      for (const q of nodes) if (off) ed.sup.delete(nk(...q)); else ed.sup.set(nk(...q), { kind: t, side: d.side });
+    }
+    return true;
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (st.phase !== 'edit' || !G) return;
+    e.preventDefault();
+    cv.setPointerCapture(e.pointerId);
+    const p = edPos(e), t = ed.tool, touch = e.pointerType === 'touch';
+    ed.hover = null;
+    if (t === 'raster') { const c = edCell(p); ed.drag = { a: c, b: c, v: edHas(...c) ? 0 : 1 }; }
+    else if (t === 'sperre') ed.drag = { p0: p, p1: p, x0: e.clientX, y0: e.clientY, moved: false, touch };
+    else {
+      const n = edNodeAt(p, touch ? 0.45 : 0.35), side = n && t !== 'last' ? sideAt(p, n) : '';
+      ed.drag = n && (t === 'last' || side) ? { a: n, b: n, side, p0: p } : null;
+      if (n && !ed.drag) $('verdict').innerHTML = '<p>Lager nur an Knoten am Rand des Rasters, auf einer Seite, an der kein Feld liegt.</p>';
+    }
+    render();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (st.phase !== 'edit' || !G) return;
+    const p = edPos(e), d = ed.drag;
+    if (!d) {
+      if (e.pointerType !== 'mouse') return;
+      const h = edHoverAt(p);
+      if (JSON.stringify(h) !== JSON.stringify(ed.hover)) { ed.hover = h; render(); }
+      return;
+    }
+    if (ed.tool === 'raster') { const c = edCell(p); if (String(c) !== String(d.b)) { d.b = c; render(); } }
+    else if (ed.tool === 'sperre') {
+      d.p1 = p;
+      if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) d.moved = true;
+      if (d.moved) render();
+    } else if (ed.tool === 'wand') {
+      const n = edNodeAt(p, 0.5);
+      if (!n || String(n) === String(d.b)) return;
+      d.b = n;
+      // die Zugrichtung legt die Seite fest: senkrecht gezogen links oder rechts, waagrecht unten oder oben
+      const v = n[0] === d.a[0], fit = v ? ['left', 'right'] : ['bottom', 'top'];
+      if (v !== (n[1] === d.a[1]) && !fit.includes(d.side)) d.side = sideAt(d.p0, d.a, fit) || d.side;
+      render();
+    }
+  });
+  cv.addEventListener('pointerup', e => {
+    const d = ed.drag;
+    if (st.phase !== 'edit' || !d) return;
+    ed.drag = null;
+    if (edApply(d)) edUpdate(); else render();
+    if (e.pointerType === 'mouse') { ed.hover = edHoverAt(edPos(e)); render(); }
+  });
+  cv.addEventListener('pointercancel', () => { if (st.phase === 'edit') { ed.drag = null; render(); } });
+  cv.addEventListener('pointerleave', () => { if (st.phase === 'edit' && ed.hover) { ed.hover = null; render(); } });
+  $('etools').onclick = e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    ed.tool = b.dataset.t;
+    for (const x of $('etools').children) x.setAttribute('aria-pressed', String(x === b));
+    ed.hover = null; controls(); render();
+  };
+  $('b-play').onclick = () => {
+    if (!ed.res || !ed.res.def) return;
+    const code = ed.code = PARTS.encode(ed.raw);
+    store.set('bau', code);   // für den Wettkampf und das nächste Mal
+    loadLevel(CUSTOM, code);
+  };
+  $('b-edclear').onclick = () => { ed.cells.fill(0); ed.sup.clear(); ed.loads = []; ed.frozen.clear(); edUpdate(); };
+  // gewählte Last: Richtung, Betrag (0,5 bis 200 kN), entfernen; Automatik für alle Lasten
+  $('l-dirs').onclick = e => {
+    const b = e.target.closest('button'), l = ed.loads[ed.sel];
+    if (b && l) { l.deg = +b.dataset.deg; edUpdate(); }
+  };
+  $('l-kn').onchange = () => {
+    const l = ed.loads[ed.sel], v = parseFloat(String($('l-kn').value).replace(',', '.'));   // leer oder ungültig: bleibt
+    if (l && Number.isFinite(v)) l.kn = Math.round(Math.min(PARTS.MAX_KN, Math.max(0.5, v)) * 10) / 10;
+    edUpdate();
+  };
+  $('l-auto').onchange = () => { ed.auto = $('l-auto').checked; edUpdate(); };
+  $('l-del').onclick = () => { ed.loads.splice(ed.sel, 1); ed.sel = ed.loads.length - 1; edUpdate(); };
+
   // ---------- Wettkampf: Verbindung ----------
   // Über den eigenen Spielserver (WebSocket ws neben der Seite). Genutzt wird nur Presence: jedes Gerät zeigt seinen Stand.
   // Mitspielende: k Raumcode, n Name, j Beitrittszeit, r Runde, s abgegeben (0/1), d Entwurf, kg Masse mal 10 und
-  // ok (hält gerade) für den Beamer. Spielleitung: k, h = 1, n, j, g {rid, ph, lv, dur, left, m},
+  // ok (hält gerade) für den Beamer. Spielleitung: k, h = 1, n, j, g {rid, ph, lv, nr, bc, dur, left, m} (nr: Nummer des
+  // Zufallsbauteils, bc: Code des eigenen Bauteils),
   // res [[peer, Name, Masse mal 10, hält]], sc [[Name, Punkte]]; p = 1, wenn sie mitspielt (dann auch r, s, d, kg, ok)
   function serverRoom() {
     if (!/^https?:$/.test(location.protocol) || !window.WebSocket) return null;
@@ -1640,10 +2372,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const MODEL = { t: 'truss', f: 'frame' };
   const DURS = [180, 300, 480, 600];
+  const MAX_BC = 1000;   // längster Code eines eigenen Bauteils im Wettkampf (Presence hat 4 KiB)
 
   // Im Wettkampf gibt es keine Probe-Rechnungen: Verformung und Auslastung laufen die ganze Runde live (Wunsch Felix)
   const mp = { on: false, role: null, code: '', name: '', j: 0, rid: 0, sub: false, revealed: 0, own: null,
-    g: { rid: 0, ph: 'lobby', lv: 0, dur: 300, left: 0, m: 't' }, tick: null, deadline: 0, revealTimer: null,
+    g: { rid: 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: 300, left: 0, m: 't' }, tick: null, deadline: 0, revealTimer: null,
     snap: null, order: null, shown: 0, boardTimer: null, scores: {}, conflict: false, hp: false, zoom: null, zm: null, all: false, bset: null, bsc: null };
   let mpScr = '';
   // hp: die Spielleitung spielt selbst mit (Name in mp.name), zoom: Entwurf in der großen Ansicht nach der Auflösung, zm: Modell
@@ -1665,8 +2398,11 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   }
   function validG(g) {
     if (!g || typeof g !== 'object' || !Number.isInteger(g.rid) || g.rid < 0) return null;
-    if (!['lobby', 'design', 'reveal'].includes(g.ph) || !Number.isInteger(g.lv) || !LEVELS[g.lv]) return null;
-    return { rid: g.rid, ph: g.ph, lv: g.lv, dur: Number(g.dur) || 300, left: Math.max(0, Math.min(999, Math.round(Number(g.left) || 0))), m: g.m === 'f' ? 'f' : 't' };
+    if (!['lobby', 'design', 'reveal'].includes(g.ph) || !Number.isInteger(g.lv)) return null;
+    if (!LEVELS[g.lv] && !(g.lv === RANDOM && Number.isInteger(g.nr) && g.nr > 0 && g.nr < 1e5)
+      && !(g.lv === CUSTOM && typeof g.bc === 'string' && g.bc.length <= MAX_BC)) return null;
+    return { rid: g.rid, ph: g.ph, lv: g.lv, nr: g.lv === RANDOM ? g.nr : 0, bc: g.lv === CUSTOM ? g.bc : '', dur: Number(g.dur) || 300,
+      left: Math.max(0, Math.min(999, Math.round(Number(g.left) || 0))), m: g.m === 'f' ? 'f' : 't' };
   }
   const hostG = () => { const h = hostPeer(); return h ? validG(h.presence.g) : null; };
   const validRes = res => (Array.isArray(res) ? res : [])
@@ -1693,7 +2429,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   // Runde vorbereiten: Bauteil und Rechenmodell der Spielleitung, Verformung und Auslastung live
   function roundSetup(g) {
     st.model = MODEL[g.m]; st.liveDef = true; st.liveUtil = true;
-    loadLevel(g.lv);
+    loadLevel(g.lv, g.lv === CUSTOM ? g.bc : g.nr);
     st.probes = 0;
     panel();
   }
@@ -1740,7 +2476,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
 
   // ---------- Wettkampf: Spielleitung ----------
   const scoreList = () => Object.values(mp.scores).sort((a, b) => b.pts - a.pts).slice(0, 10).map(s => [s.name, s.pts]);
-  const saveHost = () => store.set('host', { code: mp.code, rid: mp.g.rid, lv: mp.g.lv, dur: mp.g.dur, m: mp.g.m,
+  const saveHost = () => store.set('host', { code: mp.code, rid: mp.g.rid, lv: mp.g.lv, nr: mp.g.nr, bc: mp.g.bc, dur: mp.g.dur, m: mp.g.m,
     hp: mp.hp, name: mp.name, scores: mp.scores, t: Date.now() });
   function savedHost() {
     const h = store.get('host');
@@ -1751,7 +2487,9 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     Object.assign(mp, { role: 'host', code: r ? normCode(r.code) : newCode(), j: Date.now(), snap: null, order: null, zoom: null,
       hp: !!(r && r.hp), name: r && typeof r.name === 'string' ? clean(r.name, 16) : mp.name,
       scores: r && r.scores && typeof r.scores === 'object' ? r.scores : {},
-      g: { rid: r ? r.rid | 0 : 0, ph: 'lobby', lv: r && LEVELS[r.lv] ? r.lv : 0, dur: r && DURS.includes(r.dur) ? r.dur : 300, left: 0, m: r && r.m === 'f' ? 'f' : 't' } });
+      g: { rid: r ? r.rid | 0 : 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: r && DURS.includes(r.dur) ? r.dur : 300, left: 0, m: r && r.m === 'f' ? 'f' : 't' } });
+    if (r && (LEVELS[r.lv] || (r.lv === RANDOM && r.nr > 0) || (r.lv === CUSTOM && PARTS.fromCode(r.bc))))
+      Object.assign(mp.g, { lv: r.lv, nr: r.lv === RANDOM ? r.nr : 0, bc: r.lv === CUSTOM ? r.bc : '' });
     roundSetup(mp.g);
     st.phase = 'locked';
     pres({ k: mp.code, h: 1, n: 'Spielleitung', j: mp.j, g: { ...mp.g }, sc: scoreList() });
@@ -1761,7 +2499,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     const lv = +$('mp-lv').value, dur = +$('mp-dur').value, m = $('mp-m').value === 'f' ? 'f' : 't';
     mp.hp = $('mp-hp').checked;
     if (mp.hp) { mp.name = clean($('mp-hn').value, 16) || 'Spielleitung'; store.set('name', mp.name); }
-    Object.assign(mp.g, { rid: mp.g.rid + 1, ph: 'design', lv, dur, left: dur, m });
+    Object.assign(mp.g, { rid: mp.g.rid + 1, ph: 'design', lv, nr: lv === RANDOM ? newNr() : 0, bc: lv === CUSTOM ? store.get('bau') || '' : '', dur, left: dur, m });
     Object.assign(mp, { deadline: performance.now() + dur * 1000, snap: null, order: null, zoom: null });
     stopBoard();
     if (mp.hp) Object.assign(mp, { rid: mp.g.rid, sub: false, own: null });
@@ -1977,7 +2715,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     return net.up ? 'Live verbunden' : 'Verbinde …';
   }
   const joinText = () => `Mitspielen: <span class="joinurl">${esc(location.origin + location.pathname + '#' + mp.code)}</span> öffnen, Namen eintragen, fertig.`;
-  const roundText = () => `${esc(st.def.name)}, gerechnet als ${NAME[st.model]}`;
+  const roundText = () => `${esc(partName(st.def))}, gerechnet als ${NAME[st.model]}`;
 
   function mpScreen() {
     if (!mp.role) return 'start';
@@ -1991,6 +2729,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     if (g && g.ph === 'design' && g.rid === mp.rid) return mp.sub ? 'p-locked' : 'p-design';
     return 'p-wait';
   }
+  // zuletzt im Baukasten gespieltes Bauteil, wenn es in den Wettkampf passt
+  const ownPart = () => { const c = store.get('bau'); return typeof c === 'string' && c.length <= MAX_BC && !!PARTS.fromCode(c); };
   const DRAWING = { 'p-design': 1, 'p-locked': 1, 'p-result': 1, 'p-zoom': 1, 'h-design': 1, 'h-play': 1, 'h-zoom': 1 };
   const SIDE = {
     start: () => `<p class="mp-net" id="mp-net"></p>
@@ -2028,7 +2768,8 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
       <p>Die nächste Runde startet die Spielleitung.</p>`,
     'h-lobby': () => `<p class="mp-net" id="mp-net"></p>
       <p class="mp-warn" id="mp-warn"></p>
-      <label class="field">Bauteil<select id="mp-lv">${LEVELS.map((d, i) => `<option value="${i}">${i + 1} ${esc(d.name)}</option>`).join('')}</select></label>
+      <label class="field">Bauteil<select id="mp-lv">${LEVELS.map((d, i) => `<option value="${i}">${i + 1} ${esc(d.name)}</option>`).join('')}
+        <option value="${RANDOM}">Zufallsbauteil</option>${ownPart() ? `<option value="${CUSTOM}">Eigenes Bauteil</option>` : ''}</select></label>
       <div class="row2">
         <label class="field">Rechnen als<select id="mp-m"><option value="t">Fachwerk</option><option value="f">Rahmen</option></select></label>
         <label class="field">Zeit<select id="mp-dur">${DURS.map(s => `<option value="${s}">${mmss(s)} min</option>`).join('')}</select></label>
@@ -2116,7 +2857,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
         if (h.length === 4) $('mp-code').value = h;
       }
       if (scr === 'h-lobby') {
-        $('mp-lv').value = String(mp.g.rid ? (mp.g.lv + 1) % LEVELS.length : mp.g.lv);   // nach einer Runde das nächste Bauteil
+        $('mp-lv').value = String(mp.g.rid && mp.g.lv < RANDOM ? mp.g.lv + 1 : mp.g.lv);   // nach einer Runde das nächste, nach den festen Zufall
         $('mp-dur').value = String(mp.g.dur);
         $('mp-m').value = mp.g.m;
         const n = store.get('name'), syncHp = () => { $('mp-hn-row').hidden = $('mp-hp-note').hidden = !$('mp-hp').checked; };
@@ -2230,7 +2971,7 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     // Einstellungen für allein wiederherstellen
     st.model = store.get('model') === 'frame' ? 'frame' : 'truss';
     st.liveDef = store.get('live-def') !== false; st.liveUtil = store.get('live-util') === true;
-    loadLevel(st.li);
+    if (st.li === CUSTOM && !st.def.code) openEditor(); else loadLevel(st.li, st.def.nr || st.def.code);   // im Baukasten dort weiter
   }
 
   const ACTS = { join: joinRoom, host: () => hostGame(false), resume: () => hostGame(true), submit: playerSubmit, undo, clear: clearAll,
@@ -2380,10 +3121,15 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
     $('stamp').hidden = true; refresh();
   };
   $('b-eso').onclick = toggleEso;
-  $('b-next').onclick = () => { if (!st.busy) loadLevel((st.li + 1) % LEVELS.length); };
+  $('b-next').onclick = () => { if (!st.busy) loadLevel(Math.min(st.li + 1, RANDOM), newNr()); };   // nach den festen Bauteilen Zufall
 
-  $('levels').innerHTML = LEVELS.map((d, i) => `<button type="button" data-i="${i}">${i + 1} ${d.name}</button>`).join('');
-  $('levels').onclick = e => { const b = e.target.closest('button'); if (b && !st.busy) loadLevel(+b.dataset.i); };
+  $('levels').innerHTML = LEVELS.map((d, i) => `<button type="button" data-i="${i}">${i + 1} ${d.name}</button>`).join('') +
+    `<button type="button" data-i="${RANDOM}" title="Jedes Mal ein neues Bauteil">Zufall</button>` +
+    `<button type="button" data-i="${CUSTOM}" title="Eigenes Bauteil bauen oder das aktuelle abwandeln">Bauen</button>`;
+  $('levels').onclick = e => {
+    const b = e.target.closest('button');
+    if (b && !st.busy) +b.dataset.i === CUSTOM ? openEditor() : loadLevel(+b.dataset.i, newNr());
+  };
   for (const p of [1, 2, 3]) {
     const q = PROFILES[p - 1];
     $('pr-' + p).title = `Taste ${p}: Quadratrohr ${q.name}, ${fmt(q.kgmm * 1000, 1)} kg/m`;
@@ -2400,9 +3146,22 @@ if (typeof module !== 'undefined') module.exports = LEVELS;
   addEventListener('resize', () => { layout(); render(); });
   if (document.fonts) document.fonts.ready.then(() => { layout(); render(); });
 
+  // Links: Zufallsbauteil (#nr-…), eigenes Bauteil (#bau-…), Einstiege #zufall und #bauen; sonst false
+  function fromHash() {
+    const h = location.hash, nr = /^#nr-([1-9]\d{0,4})$/.exec(h), bau = /^#bau-(.+)$/.exec(h);
+    if (nr) loadLevel(RANDOM, +nr[1]);
+    else if (bau && PARTS.fromCode(bau[1])) loadLevel(CUSTOM, bau[1]);
+    else if (h === '#zufall') loadLevel(RANDOM, newNr());
+    else if (h === '#bauen') {
+      loadLevel(2); openEditor();   // Vorlage: Kragarm
+      try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    } else return false;
+    return true;
+  }
   readColors();
-  loadLevel(0);
+  if (!fromHash()) loadLevel(0);
   if (/^#[A-Za-z0-9]{4}$/.test(location.hash)) setMode(true);   // Einladungslink mit Raumcode
+  addEventListener('hashchange', () => { if (!mp.on && !st.busy) fromHash(); });   // Link in ein offenes Spiel eingefügt
 })();
 
 </script>
