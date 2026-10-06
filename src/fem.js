@@ -123,6 +123,25 @@ const FEM = (() => {
     }
     return out;
   }
+  // Stäbe im Sinne der Statik: Ein gerader Stabzug über Durchlaufstellen ist ein Stab. Je Stab die Liste seiner Rasterstäbe
+  // (set: Rasterstäbe, die zählen)
+  function members(L, set) {
+    const pass = passNodes(L, set), seen = new Uint8Array(L.nB), out = [];
+    for (let k = 0; k < L.nB; k++) if (set[k] && !seen[k]) {
+      const chain = [k];
+      seen[k] = 1;
+      for (const start of [L.bars[k].a, L.bars[k].b]) {
+        let n = start, cur = k;
+        while (pass.has(n)) {
+          const o = L.nodeBars[n].find(q => set[q] && q !== cur);
+          if (seen[o]) break;
+          seen[o] = 1; chain.push(o); cur = o; n = L.bars[o].a === n ? L.bars[o].b : L.bars[o].a;
+        }
+      }
+      out.push(chain);
+    }
+    return out;
+  }
   // Knicklänge: gerader Stabzug über Durchlaufstellen bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein
   // Lager quer hält. Ob dieser Knoten wirklich hält, prüft die Stabilitätsprüfung in analyze.
   function bucklingLength(L, fe, k, pass = passNodes(L, fe)) {
@@ -505,7 +524,7 @@ const FEM = (() => {
     return { res: best.res, on: best.on };
   }
 
-  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, bucklingLength,
+  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, bucklingLength,
     analyze, localU, size, optimize };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;

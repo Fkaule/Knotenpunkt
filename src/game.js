@@ -55,10 +55,18 @@
   const C = {};
   const startOn = L => Uint8Array.from(L.frozen);   // Start: nur die gesperrten Stäbe, im dünnsten Profil
   const kg = (on, set) => FEM.mass(st.L, on, set);
-  const profText = on => {
-    const n = PROFILES.map((_, p) => count(Array.from(on, x => x === p + 1)));
-    return n.some(Boolean) ? n.map((c, p) => c ? `${c} × ${PROFILES[p].b}` : '').filter(Boolean).join(', ') : 'keine';
-  };
+  // Stäbe zählen wie in der Statik: Ein gerader Stabzug über Durchlaufstellen ist ein Stab (FEM.members). on: Profil je
+  // Rasterstab, nur die, die zählen. count: Zahl der Stäbe, text: nach Profil, Stäbe mit wechselndem Profil als „gemischt“
+  function barsOf(on) {
+    const ms = FEM.members(st.L, on), n = [0, 0, 0];
+    let mixed = 0;
+    for (const m of ms) if (m.every(k => on[k] === on[m[0]])) n[on[m[0]] - 1]++; else mixed++;
+    const parts = n.map((c, p) => c ? `${c} × ${PROFILES[p].b}` : '').filter(Boolean);
+    if (mixed) parts.push(`${mixed} gemischt`);
+    return { count: ms.length, text: parts.length ? parts.join(', ') : 'keine' };
+  }
+  const inSet = (on, set) => Uint8Array.from(on, (x, k) => set[k] ? x : 0);   // Profile nur der Stäbe aus set
+  const nStab = n => `${fmt(n)} ${n === 1 ? 'Stab' : 'Stäbe'}`;
 
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -465,9 +473,15 @@
       : 'Das Stabwerk ist beweglich, die Lagerung reicht nicht.';
     if (r.reason === 'stabil') return 'Das Tragwerk ist instabil: Unter den Druckkräften weicht es als Ganzes seitlich aus, obwohl jeder Stab für sich hält' +
       (Number.isFinite(r.lambda) ? ` (kritischer Lastfaktor etwa ${fmt(r.lambda, 2)}).` : '.');
+    // je Stab gezählt: Knickt ein Teil eines Stabzugs, knickt der Stab
+    let nYield = 0, nBuckle = 0;
+    for (const m of FEM.members(st.L, r.fe)) {
+      if (m.some(k => r.fail[k] === 2)) nBuckle++;
+      else if (m.some(k => r.fail[k] === 1)) nYield++;
+    }
     const parts = [];
-    if (r.nYield) parts.push(r.nYield === 1 ? 'ein Stab fließt' : `${r.nYield} Stäbe fließen`);
-    if (r.nBuckle) parts.push(r.nBuckle === 1 ? 'ein Druckstab knickt' : `${r.nBuckle} Druckstäbe knicken`);
+    if (nYield) parts.push(nYield === 1 ? 'ein Stab fließt' : `${nYield} Stäbe fließen`);
+    if (nBuckle) parts.push(nBuckle === 1 ? 'ein Druckstab knickt' : `${nBuckle} Druckstäbe knicken`);
     const t = parts.join(', ');
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
@@ -487,8 +501,11 @@
       : `Verformung live als ${NAME[r.model]}, ${overText(scale)}.`;
     else if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Es gibt eine Bewegung, bei der sich kein Stab dehnt; das Stabwerk ist beweglich.`;
     else if (r.reason === 'stabil') t = `${NAME[r.model]}: Stabilitätsprüfung nicht bestanden${lam ? ', ' + lam : ''}. Gezeigt ist die Knickform.`;
-    else if (r.disp) t = `${NAME[r.model]}: ${fmt(r.bars)} Stäbe, ${fmt(r.dofs)} Freiheitsgrade, gelöst in ${fmt(r.ms, 1)} ms` +
-      (lam ? `, Stabilität: ${lam}` : '') + (scale ? `. Verformung ${overText(scale)}.` : '.');
+    else if (r.disp) {
+      const n = FEM.members(st.L, r.fe).length;   // durchgehende Stäbe bestehen aus mehreren Elementen
+      t = `${NAME[r.model]}: ${nStab(n)}${n < r.bars ? ` aus ${fmt(r.bars)} Elementen` : ''}, ${fmt(r.dofs)} Freiheitsgrade, gelöst in ${fmt(r.ms, 1)} ms` +
+        (lam ? `, Stabilität: ${lam}` : '') + (scale ? `. Verformung ${overText(scale)}.` : '.');
+    }
     $('femline').textContent = t;
   }
   const legend = on => { $('legend').hidden = !on; };
@@ -500,7 +517,8 @@
     $('tb-name').textContent = partName(d);
     $('tb-load').textContent = loadText(d);
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
-    $('tb-bars').textContent = `${count(conn)}: ${profText(Uint8Array.from(on, (x, k) => conn[k] ? x : 0))}`;
+    const b = barsOf(inSet(on, conn));
+    $('tb-bars').textContent = `${b.count}: ${b.text}`;
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
     $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
     const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
@@ -742,8 +760,9 @@
     e.inModel = e.inModel || {};
     const r = e.inModel[m] = e.inModel[m] || FEM.analyze(st.L, e.on, m);
     reveal(r, e.on, false, () => {
-      $('verdict').innerHTML = `<p>Lösung des Algorithmus, optimiert als ${NAME[st.model]}: ${fmt(kg(e.on, e.res.conn))} kg, ${count(e.res.conn)} Stäbe ` +
-        `(${profText(e.on)}). Er hat immer den am wenigsten ausgelasteten Stab entfernt und danach jedem Stab das kleinste Profil gegeben, das hält.</p>` +
+      const b = barsOf(inSet(e.on, e.res.conn));
+      $('verdict').innerHTML = `<p>Lösung des Algorithmus, optimiert als ${NAME[st.model]}: ${fmt(kg(e.on, e.res.conn))} kg, ${nStab(b.count)} ` +
+        `(${b.text}). Er hat immer den am wenigsten ausgelasteten Stab entfernt und danach jedem Stab das kleinste Profil gegeben, das hält.</p>` +
         `<p>Als ${NAME[m]} gerechnet: ${r.ok ? `<span class="t-ok">hält</span>, max. Auslastung ${pct(r.maxUtil)} %.` : `<span class="t-bad">versagt.</span> ${failWhy(r)}`}</p>`;
     });
   }
@@ -1466,7 +1485,7 @@
       if (!redraw && card.dataset.open === String(open)) continue;
       card.dataset.open = String(open);
       drawMini(card.querySelector('canvas'), e.on, open ? e.res : null);
-      card.querySelector('.vl').textContent = open ? `${fmt(e.kg, 1)} kg, ${count(e.res.conn)} Stäbe` : '';
+      card.querySelector('.vl').textContent = open ? `${fmt(e.kg, 1)} kg, ${nStab(barsOf(inSet(e.on, e.res.conn)).count)}` : '';
       const vd = card.querySelector('.vd');
       vd.textContent = !open ? '' : e.ok ? 'Hält' : 'Hält nicht';
       vd.className = 'vd' + (!open ? '' : e.ok ? ' ok' : ' bad');

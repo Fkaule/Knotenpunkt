@@ -202,3 +202,15 @@ test("Bewegungsform im Fachwerk: Stütze des leeren Tors dreht sich gerade um da
   assert.strictEqual(k.reason, "mechanismus");
   assert.ok(k.disp[K.id(1, 0) * 3 + 1] < 0, "Lastknoten bewegt sich nach unten");
 });
+
+test("Stäbe zählen wie in der Statik: ein gerader Stabzug über Durchlaufstellen ist ein Stab", () => {
+  const LEVELS = require("../src/levels.js");
+  const L = FEM.level(LEVELS[0]);   // Tor: Stützen und Riegel aus je drei Rasterstäben
+  assert.strictEqual(FEM.members(L, L.frozen).length, 3);
+  const quer = Uint8Array.from(L.frozen);
+  quer[L.barAt(0, 1, 1, 1)] = 1;   // Querstab teilt die linke Stütze
+  assert.strictEqual(FEM.members(L, quer).length, 5);
+  const diag = Uint8Array.from(L.frozen);
+  for (const b of [[0, 0, 1, 1], [1, 1, 2, 2], [2, 2, 3, 3]]) diag[L.barAt(...b)] = 1;   // Diagonale von Ecke zu Ecke: ein Stab
+  assert.strictEqual(FEM.members(L, diag).length, 4);
+});
