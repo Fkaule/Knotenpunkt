@@ -472,10 +472,12 @@
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${pct(r.maxUtil)} %, hält.` : failWhy(r);
-  // Hinweis beim Zeichnen: Ein verschiebliches Stabwerk lässt sich nicht rechnen, es gibt weder Kräfte noch Auslastung
-  const moveText = r => (r.model === 'truss'
+  // Hinweis beim Zeichnen, auch blind: Ein verschiebliches Stabwerk lässt sich nicht rechnen, es gibt weder Kräfte noch
+  // Auslastung. shown: die Zeichnung zeigt die Bewegung live
+  const moveText = (model, shown) => (model === 'truss'
     ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten oder ein Lager fehlt.'
-    : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') + ' Deshalb lässt es sich noch nicht rechnen; die Zeichnung zeigt die Bewegung.';
+    : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') + ' So lässt es sich nicht rechnen' + (shown ? '; die Zeichnung zeigt die Bewegung.' : '.');
+  const moveHtml = (model, shown) => `<b>Noch verschieblich.</b> ${moveText(model, shown)}`;
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
   function showFem(r, scale, live) {
     let t = '';
@@ -548,15 +550,18 @@
         st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
         showFem(r, scale, !colors);
         legend(colors && r.disp && !modeShape(r));
-        const what = r.reason === 'mechanismus' ? `<b>Noch verschieblich.</b> ${moveText(r)}`
+        const moving = r.reason === 'mechanismus';
+        const what = moving ? moveHtml(st.model, scale > 0)
           : colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
-        $('verdict').innerHTML = `<p>${what}</p>${hint}`;
+        $('verdict').innerHTML = `<p${moving ? ' class="warnbox"' : ''}>${what}</p>${hint}`;
         if (plays() && !mp.sub) pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: r.ok ? 1 : 0 });   // Stand für den Beamer
       } else {
+        // blind: keine Rechnung zu sehen, aber dass es so noch verschieblich ist, steht trotzdem da
         st.view = { mode: 'blind' };
+        const moving = FEM.analyze(st.L, st.on, st.model, true).reason === 'mechanismus';
         legend(false);
         $('femline').textContent = '';
-        $('verdict').innerHTML = `<p>${st.def.note}</p>${hint}`;
+        $('verdict').innerHTML = moving ? `<p class="warnbox">${moveHtml(st.model, false)}</p>${hint}` : `<p>${st.def.note}</p>${hint}`;
       }
     }
     panel(); controls(); render(); mpRender();
@@ -1744,7 +1749,9 @@
     if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
     if (scr === 'p-design' || scr === 'h-play') {
       const r = st.view.res;
-      set('mp-live', r ? esc(`Live: ${r.reason === 'mechanismus' ? 'Noch verschieblich. ' + moveText(r) : statusText(r)} Masse ${fmt(kg(st.on, r.conn))} kg.`) : '');
+      const moving = !!r && r.reason === 'mechanismus';
+      set('mp-live', !r ? '' : (moving ? moveHtml(st.model, true) : esc(`Live: ${statusText(r)}`)) + esc(` Masse ${fmt(kg(st.on, r.conn))} kg.`));
+      $('mp-live').classList.toggle('warnbox', moving);
     }
     if (scr === 'h-play') set('mp-chips', chips(true));
     if (scr === 'p-result') {
