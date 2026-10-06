@@ -564,15 +564,20 @@
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
     if (st.phase === 'design') {
       if (st.liveDef || st.liveUtil) {
-        const r = FEM.analyze(st.L, st.on, st.model), scale = st.liveDef ? liveScale(r) : 0, colors = st.liveUtil;
+        // im Wettkampf lässt sich die Ansicht zur Info umschalten (st.look), gewertet wird im Modell der Runde
+        const m = mp.on && st.look ? st.look : st.model;
+        const r = FEM.analyze(st.L, st.on, m), scale = st.liveDef ? liveScale(r) : 0, colors = st.liveUtil;
         st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
         showFem(r, scale, !colors);
         legend(colors && r.disp && !modeShape(r));
         const moving = r.reason === 'mechanismus';
-        const what = moving ? moveHtml(st.model, scale > 0)
-          : colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
+        const what = moving ? moveHtml(m, scale > 0)
+          : colors ? `Live als ${NAME[m]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
         $('verdict').innerHTML = `<p${moving ? ' class="warnbox"' : ''}>${what}</p>${hint}`;
-        if (plays() && !mp.sub) pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: r.ok ? 1 : 0 });   // Stand für den Beamer
+        if (plays() && !mp.sub) {   // Stand für den Beamer, immer im Modell der Runde
+          const rs = m === st.model ? r : FEM.analyze(st.L, st.on, st.model, true);
+          pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: rs.ok ? 1 : 0 });
+        }
       } else {
         // blind: keine Rechnung zu sehen, aber dass es so noch verschieblich ist, steht trotzdem da
         st.view = { mode: 'blind' };
@@ -1292,7 +1297,7 @@
   // ---------- Wettkampf: Mitspielende ----------
   // Runde vorbereiten: Bauteil und Rechenmodell der Spielleitung, Verformung und Auslastung live
   function roundSetup(g) {
-    st.model = MODEL[g.m]; st.liveDef = true; st.liveUtil = true;
+    st.model = st.look = MODEL[g.m]; st.liveDef = true; st.liveUtil = true;
     loadLevel(g.lv, g.lv === CUSTOM ? g.bc : g.nr);
     st.probes = 0;
     panel();
@@ -1333,6 +1338,7 @@
   }
   // eigenen Entwurf aufdecken wie im Einzelspiel
   function ownReveal() {
+    st.look = st.model;
     const r = FEM.analyze(st.L, st.on, st.model);
     st.res = { [st.model]: r }; st.shown = st.model; st.phase = 'result';
     reveal(r, st.on, true, () => { mp.own = r; mpRender(); });
@@ -1436,6 +1442,7 @@
   // zurück zum eigenen Ergebnis
   function playerMine() {
     stopBoard();
+    st.look = st.model;
     Object.assign(mp, { all: false, zoom: null });
     st.animId++; st.busy = false;   // laufende Animation der großen Ansicht anhalten
     const r = mp.own;
@@ -1517,6 +1524,18 @@
     const e = mp.order[mp.zoom];
     st.on = e.on.slice(); st.conn = e.res.conn;
     reveal(e.res, st.on, true, () => { $('stamp').hidden = true; mpRender(); });
+    mpRender();
+  }
+  // Ansicht zur Info umschalten: beim Bauen live, nach dem Aufdecken das eigene Ergebnis im anderen Modell. Gewertet wird
+  // weiter im Modell der Runde (st.model).
+  function look(m) {
+    if (st.busy || (st.look || st.model) === m) return;
+    st.look = m;
+    if (st.phase === 'design') refresh();
+    else if (st.phase === 'result' && mp.own) {
+      st.res[m] = st.res[m] || FEM.analyze(st.L, st.on, m);
+      reveal(st.res[m], st.on, false, () => mpRender());
+    }
     mpRender();
   }
   function zoomModel(m) {
@@ -1614,6 +1633,11 @@
     'p-design': () => `<p class="mp-net" id="mp-net"></p>
       <p><b>Runde ${mp.role === 'host' ? mp.g.rid : mp.rid}: ${roundText()}.</b> Bauen Sie bis zum Ablauf der Zeit ein Tragwerk, das hält,
         so leicht wie möglich. Verformung und Auslastung sehen Sie live.</p>
+      <div class="model" role="group" aria-label="Ansicht">
+        <span>Ansicht</span>
+        <span class="tools"><button type="button" data-act="lt" id="mp-lt">Fachwerk</button><button type="button" data-act="lf" id="mp-lf">Rahmen</button></span>
+      </div>
+      <p class="mp-note" id="mp-look"></p>
       <p id="mp-live"></p>
       <div class="actions">
         <button class="btn primary" type="button" data-act="submit">Abgeben</button>
@@ -1626,6 +1650,11 @@
       <p id="mp-msg"></p>`,
     'p-result': () => `<p class="mp-net" id="mp-net"></p>
       <div id="mp-result"></div>
+      <div class="model" role="group" aria-label="Ansicht">
+        <span>Ansicht</span>
+        <span class="tools"><button type="button" data-act="lt" id="mp-lt">Fachwerk</button><button type="button" data-act="lf" id="mp-lf">Rahmen</button></span>
+      </div>
+      <p class="mp-note" id="mp-look"></p>
       <button class="btn primary" type="button" data-act="all" id="mp-all-btn">Alle Entwürfe ansehen</button>
       <h3>Diese Runde</h3><div id="mp-rank"></div>
       <h3>Gesamtwertung</h3><div id="mp-score"></div>
@@ -1767,10 +1796,20 @@
     }
     if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
     if (scr === 'p-design' || scr === 'h-play') {
-      const r = st.view.res;
+      const r = st.view.res, alt = !!r && r.model !== st.model;   // alt: Ansicht im anderen Modell
       const moving = !!r && r.reason === 'mechanismus';
-      set('mp-live', !r ? '' : (moving ? moveHtml(st.model, true) : esc(`Live: ${statusText(r)}`)) + esc(` Masse ${fmt(kg(st.on, r.conn))} kg.`));
+      set('mp-live', !r ? '' : (moving ? (alt ? esc(`Als ${NAME[r.model]}: `) : '') + moveHtml(r.model, true)
+        : esc(`Live${alt ? ` als ${NAME[r.model]}` : ''}: ${statusText(r)}`)) + esc(` Masse ${fmt(kg(st.on, r.conn))} kg.`));
       $('mp-live').classList.toggle('warnbox', moving);
+    }
+    // Ansicht zur Info: welches Modell gezeigt wird, gewertet wird im Modell der Runde
+    if ($('mp-lt')) {
+      const m = st.look || st.model, r = st.phase === 'result' && st.res && st.res[m];
+      $('mp-lt').setAttribute('aria-pressed', String(m === 'truss'));
+      $('mp-lf').setAttribute('aria-pressed', String(m === 'frame'));
+      set('mp-look', m === st.model ? `Gewertet wird als ${NAME[st.model]}. Zur Info können Sie auf ${NAME[other(st.model)]} umschalten.`
+        : esc(`Ansicht als ${NAME[m]}, nur zur Info; gewertet wird als ${NAME[st.model]}.`) + (r ? ` Als ${NAME[m]} gerechnet: ${r.ok
+          ? `<span class="t-ok">hält</span>, max. Auslastung ${pct(r.maxUtil)} %.` : `<span class="t-bad">hält nicht.</span> ${esc(failWhy(r))}`}` : ''));
     }
     if (scr === 'h-play') set('mp-chips', chips(true));
     if (scr === 'p-result') {
@@ -1843,7 +1882,7 @@
   const ACTS = { join: joinRoom, host: () => hostGame(false), resume: () => hostGame(true), submit: playerSubmit, undo, clear: clearAll,
     leave: () => leaveRoom(false), end: () => leaveRoom(true), start: hostStart, now: hostEndNow, next: hostNext,
     zoom: b => zoomTo(+b.dataset.i), zprev: () => zoomTo(mp.zoom - 1), znext: () => zoomTo(mp.zoom + 1), zback: zoomEnd,
-    zt: () => zoomModel('truss'), zf: () => zoomModel('frame'), all: playerAll, mine: playerMine };
+    zt: () => zoomModel('truss'), zf: () => zoomModel('frame'), lt: () => look('truss'), lf: () => look('frame'), all: playerAll, mine: playerMine };
   for (const id of ['mp-ui', 'mp-board']) $(id).addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
     if (b && !b.disabled && ACTS[b.dataset.act]) ACTS[b.dataset.act](b);
