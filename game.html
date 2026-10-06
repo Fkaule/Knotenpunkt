@@ -303,6 +303,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           <button class="btn" id="b-eso" type="button">Lösung des Algorithmus</button>
           <button class="btn" id="b-next" type="button">Nächstes Bauteil</button>
         </div>
+        <p class="share-msg" id="duel-hint" hidden>Herausfordern geht nur mit einem Versuch ohne Live-Auslastung: „Neuer Versuch“, dann bei „Live“ die Auslastung ausschalten.</p>
         <div class="share" id="share" hidden>
           <label class="field">Ihr Name für die Herausforderung<input id="share-name" maxlength="16" autocomplete="nickname"></label>
           <button class="btn" id="b-copy" type="button">Link kopieren</button>
@@ -2075,13 +2076,15 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('ledit').hidden = !(edit && ed.tool === 'last' && ed.loads.length);
     $('model-row').hidden = $('live-row').hidden = edit;
     $('lv-util').hidden = !!duel;   // in einer Herausforderung keine Live-Auslastung
-    // herausfordern nur mit einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist
-    $('b-duel').hidden = mp.on || st.phase !== 'result' || mine10() < 0 || st.practice;
+    // herausfordern nur mit einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist (sonst ausgegraut mit Hinweis)
+    $('b-duel').hidden = mp.on || st.phase !== 'result' || mine10() < 0;
+    $('duel-hint').hidden = $('b-duel').hidden || !st.practice;
     if (st.phase !== 'result') $('share').hidden = true;
     if (!mp.on) $('profiles').hidden = $('howto').hidden = edit;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
       $('b-probe').disabled = !st.probes || st.liveUtil;
+      $('b-duel').disabled = st.practice;
       $('b-undo').disabled = !st.undo.length;
       $('b-eso').disabled = !esoNow();
       $('b-play').disabled = !(edit && ed.res && ed.res.def);
@@ -2144,7 +2147,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     if (!def) { i = 0; def = LEVELS[0]; }
     st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def); applyOpts();
     if (duel && duel.key !== partKey()) duel = null;   // anderes Bauteil beendet die Herausforderung
-    st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false; st.practice = st.liveUtil;
+    st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false; st.practice = st.liveUtil; st.touched = false;
     st.drag = null; st.hover = null;
     $('stamp').hidden = true;
     document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
@@ -2155,7 +2158,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     layout(); refresh(); startEso();
   }
 
-  const pushUndo = () => { st.undo.push(st.on.slice()); if (st.undo.length > 200) st.undo.shift(); };
+  const pushUndo = () => { st.undo.push(st.on.slice()); if (st.undo.length > 200) st.undo.shift(); st.touched = true; };
   // Zeichnen setzt das gewählte Profil, Entfernen nimmt Stäbe weg (gesperrte bleiben)
   function apply(list, erase) {
     const ch = list.filter(k => erase ? st.on[k] && !st.L.frozen[k] : st.on[k] !== st.prof);
@@ -2345,7 +2348,11 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   function toggleLive(what) {
     if (!editable()) return;
     if (what === 'def') { st.liveDef = !st.liveDef; store.set('live-def', st.liveDef); }
-    else { st.liveUtil = !st.liveUtil; store.set('live-util', st.liveUtil); if (st.liveUtil) st.practice = true; }
+    else {
+      st.liveUtil = !st.liveUtil; store.set('live-util', st.liveUtil);
+      // Übungsmodus: wer die Auslastung beim Bauen gesehen hat; vor dem ersten Stab ausgeschaltet, zählt der Versuch normal
+      if (st.liveUtil) st.practice = true; else if (!st.touched) st.practice = false;
+    }
     st.phase = 'design';
     refresh();
   }
@@ -3668,7 +3675,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   };
   $('b-retry').onclick = () => {
     if (st.busy) return;
-    st.animId++; st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.practice = st.liveUtil;
+    st.animId++; st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.practice = st.liveUtil; st.touched = false;
     $('stamp').hidden = true; refresh();
   };
   $('b-eso').onclick = toggleEso;

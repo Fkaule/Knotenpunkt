@@ -29,7 +29,7 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 
 ## Kommilitonen herausfordern
 
-- Nach einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist, erzeugt „Kommilitonen herausfordern“ einen Link mit Bauteil, Regeln (Rechenmodell, Eigengewicht, Knicken), Masse und Namen: `#duell~<Bauteil>~<t|f>~<Eigengewicht 0|1><Knicken 0|1>~<Masse mal 10>~<Name>`, Bauteil `f0` bis `f3` (fest), `z<Nummer>` (Zufall) oder `b<Code>` (Baukasten).
+- Nach einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist, erzeugt „Kommilitonen herausfordern“ einen Link (mit Live-Auslastung ist der Knopf ausgegraut, ein Hinweis sagt, wie es geht) mit Bauteil, Regeln (Rechenmodell, Eigengewicht, Knicken), Masse und Namen: `#duell~<Bauteil>~<t|f>~<Eigengewicht 0|1><Knicken 0|1>~<Masse mal 10>~<Name>`, Bauteil `f0` bis `f3` (fest), `z<Nummer>` (Zufall) oder `b<Code>` (Baukasten).
 - Wer den Link öffnet, spielt dasselbe Bauteil nach denselben Regeln, ohne Live-Auslastung, und versucht, leichter zu bauen. Oben im Bedienfeld steht das Ziel, nach dem Abgeben der Ausgang (gewonnen, Gleichstand, vorn liegt der andere); „Kommilitonen herausfordern“ schickt das eigene Ergebnis zurück.
 - Ein anderes Bauteil, ein anderes Rechenmodell, andere Einstellungen oder der Wettkampf beenden die Herausforderung. Gespeichert wird nichts; die Links zeigen auf die öffentliche Seite (lokal auf die eigene).
 
