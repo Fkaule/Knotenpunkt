@@ -336,7 +336,7 @@
   }
   // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, im Rahmen nur Biegung
   // violett, Zahl in kN; dazu Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
-  // Zahl: Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
+  // Zahl: Druckkraft / Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
   const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)', BIEGUNG = 'rgb(138,76,196)';
   // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
   const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
@@ -373,7 +373,7 @@
       else {
         const k = seg.reduce((a, b) => r.N[b] < r.N[a] ? b : a);
         if (!(r.N[k] < 0) || ohneN(r, k)) continue;
-        t = kNnum(r.ncr[k]); rank = -r.N[k] / r.ncr[k];
+        t = `${kNsig(-r.N[k])} / ${kNnum(r.ncr[k])}`; rank = -r.N[k] / r.ncr[k];
       }
       items.push([x / seg.length, y / seg.length, t, rank]);
     }
@@ -451,7 +451,7 @@
         .map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
       '</ol><span>0 heißt null, nicht nur klein: kleine Kräfte stehen mit Wert da; grüne Pfeile: Lagerkräfte</span>';
     if (st.out === 'stress') return `<span class="lg-t">Spannung je Stab in MPa</span>${bands(b => fmt(FEM.RE * b / 10))}<span>über ${FEM.RE} MPa fließt der Stab</span>`;
-    if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
+    if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Druckkraft / Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
       `<span>${st.buck ? 'über 100 % knickt der Stab' : 'Knicken ist ausgeschaltet, nur zur Info'}; Zugstäbe grau</span>`;
     return `<span class="lg-t">Auslastung je Stab in %</span>${bands(b => fmt(10 * b))}<span>über 100 % ${st.buck ? 'fließt der Stab oder knickt' : 'fließt der Stab'}</span>`;
   }

@@ -228,7 +228,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <button type="button" data-o="util" aria-pressed="true" title="Auslastung je Stab in Prozent">Auslastung</button>
             <button type="button" data-o="force" aria-pressed="false" title="Stabkräfte (Zug, Druck, Nullstäbe) und Lagerkräfte in kN">Kräfte</button>
             <button type="button" data-o="stress" aria-pressed="false" title="Spannung je Stab in MPa">Spannungen</button>
-            <button type="button" data-o="buckle" aria-pressed="false" title="Knicklast je Druckstab in kN">Knicklasten</button>
+            <button type="button" data-o="buckle" aria-pressed="false" title="Druckkraft und Knicklast je Druckstab in kN">Knicklasten</button>
           </span>
         </div>
         <div class="legend" id="legend" hidden></div>
@@ -319,7 +319,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet, und er zählt als ein Stab.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts und zählen bei der Masse. Im Fachwerk drehen sie sich um ihren Knoten: Dann ist das Fachwerk verschieblich, wie nach dem Abzählkriterium.</li>
             <li><b>Eigengewicht</b> (Einstellung „Mit“): je tragendem Stab Masse mal g = 9,81 m/s², verteilt auf seine Enden wie beim Einfeldträger (im Fachwerk ist ein gerader Stabzug ein Stab). <b>Knicken</b> ausgeschaltet prüft nur Fließen, ohne Knicken der Stäbe und des Ganzen; die Knicklasten zeigt das Spiel weiter zur Info. Der Gegner rechnet mit denselben Einstellungen.</li>
-            <li><b>Werte</b> unter der Zeichnung, sobald Farben zu sehen sind: Auslastung, Kräfte (Stabkraft N in kN, Zug +, Druck −; 0 nur, wenn die Kraft null ist, nicht nur klein: Nullstab grau, im Rahmen nur Biegung violett; Lagerkräfte als grüne Pfeile), Spannungen (|N| / A + |M|max / W in MPa) und Knicklasten (π² E I / Lk² in kN, Farbe: Druckkraft je Knicklast).</li>
+            <li><b>Werte</b> unter der Zeichnung, sobald Farben zu sehen sind: Auslastung, Kräfte (Stabkraft N in kN, Zug +, Druck −; 0 nur, wenn die Kraft null ist, nicht nur klein: Nullstab grau, im Rahmen nur Biegung violett; Lagerkräfte als grüne Pfeile), Spannungen (|N| / A + |M|max / W in MPa) und Knicklasten (Zahl: Druckkraft / Knicklast π² E I / Lk² in kN, Farbe: Druckkraft je Knicklast).</li>
             <li><b>Abzählkriterium</b> (Schriftfeld): k Knoten, s Stäbe, r Lagerreaktionen (Festlager 2, Loslager 1, Einspannung je Knoten 2 im Fachwerk, 3 im Rahmen). Fachwerk f = 2k − s − r, Rahmen f = 3k − 3s − r. f &gt; 0 heißt verschieblich, f = 0 statisch bestimmt, f &lt; 0 so oft statisch unbestimmt. Ist es trotz f ≤ 0 verschieblich, ist es ein Ausnahmefall; den findet die Rechnung.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
             <li><b>Zufall und Baukasten:</b> Zu jeder Nummer gehört ein festes Bauteil, gleich auf jedem Gerät. Die Lasten sind so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, auf glatte Beträge gerundet. So ist jedes Bauteil lösbar: Das volle Raster hält als Fachwerk und als Rahmen. Im Baukasten gilt das auch für selbst gesetzte Beträge.</li>
@@ -1647,7 +1647,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   }
   // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, im Rahmen nur Biegung
   // violett, Zahl in kN; dazu Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
-  // Zahl: Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
+  // Zahl: Druckkraft / Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
   const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)', BIEGUNG = 'rgb(138,76,196)';
   // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
   const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
@@ -1684,7 +1684,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
       else {
         const k = seg.reduce((a, b) => r.N[b] < r.N[a] ? b : a);
         if (!(r.N[k] < 0) || ohneN(r, k)) continue;
-        t = kNnum(r.ncr[k]); rank = -r.N[k] / r.ncr[k];
+        t = `${kNsig(-r.N[k])} / ${kNnum(r.ncr[k])}`; rank = -r.N[k] / r.ncr[k];
       }
       items.push([x / seg.length, y / seg.length, t, rank]);
     }
@@ -1762,7 +1762,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
         .map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
       '</ol><span>0 heißt null, nicht nur klein: kleine Kräfte stehen mit Wert da; grüne Pfeile: Lagerkräfte</span>';
     if (st.out === 'stress') return `<span class="lg-t">Spannung je Stab in MPa</span>${bands(b => fmt(FEM.RE * b / 10))}<span>über ${FEM.RE} MPa fließt der Stab</span>`;
-    if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
+    if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Druckkraft / Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
       `<span>${st.buck ? 'über 100 % knickt der Stab' : 'Knicken ist ausgeschaltet, nur zur Info'}; Zugstäbe grau</span>`;
     return `<span class="lg-t">Auslastung je Stab in %</span>${bands(b => fmt(10 * b))}<span>über 100 % ${st.buck ? 'fließt der Stab oder knickt' : 'fließt der Stab'}</span>`;
   }
