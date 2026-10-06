@@ -97,20 +97,44 @@
     return false;
   }
   // Lastpfeil in Rasterfeldern: zeigt er ins Bauteil, drückt er von außen auf den Knoten, sonst hängt er am Knoten.
-  // Die Beschriftung steht am äußeren Ende, waagrechte Pfeile davor oder dahinter, senkrechte rechts daneben.
+  // Die Beschriftung steht am äußeren Ende, waagrechte Pfeile davor oder dahinter, senkrechte rechts daneben. spots: Stellen
+  // zum Ausweichen (siehe loadGeoms), waagrecht über und unter dem Ende, sonst links daneben und hinter dem Ende.
   function loadGeom(ld, s) {
     const F = Math.hypot(ld.fx, ld.fy), u = [ld.fx / F, ld.fy / F], [i, j] = ld.node;
     const push = inDomain(i + 0.45 * u[0], j + 0.45 * u[1]);
     const tip = push ? [i - u[0] * 0.12, j - u[1] * 0.12] : [i + u[0] * 0.92, j + u[1] * 0.92];
     const tail = push ? [tip[0] - u[0] * 0.8, tip[1] - u[1] * 0.8] : [i + u[0] * 0.12, j + u[1] * 0.12];
-    const end = push ? tail : tip;
+    const end = push ? tail : tip, out = push ? [-u[0], -u[1]] : u;   // out: vom Knoten weg
     ctx.save(); ctx.font = `600 ${fontPx(s)}px ${MONO}`;
     const w = ctx.measureText(`F = ${kNtxt(ld)}`).width / s, h = fontPx(s) / s;
     ctx.restore();
-    const left = Math.abs(u[0]) > 0.7 && end[0] < i;
-    const lab = Math.abs(u[0]) > 0.7 ? [end[0] + (left ? -0.12 : 0.12), end[1]] : [end[0] + 0.12, end[1] + (end[1] < j ? 0.1 : -0.1)];
-    const box = left ? [lab[0] - w, lab[1] - h / 2, lab[0], lab[1] + h / 2] : [lab[0], lab[1] - h / 2, lab[0] + w, lab[1] + h / 2];
-    return { u, tip, tail, lab, align: left ? 'right' : 'left', box };
+    const at = (x, y, align) => ({ lab: [x, y], align, box: align === 'left' ? [x, y - h / 2, x + w, y + h / 2]
+      : align === 'right' ? [x - w, y - h / 2, x, y + h / 2] : [x - w / 2, y - h / 2, x + w / 2, y + h / 2] });
+    const left = Math.abs(u[0]) > 0.7 && end[0] < i, dy = end[1] < j ? 0.1 : -0.1;
+    const spots = Math.abs(u[0]) > 0.7
+      ? [at(end[0] + (left ? -0.12 : 0.12), end[1], left ? 'right' : 'left'), at(end[0], end[1] + 0.12 + h / 2, 'center'), at(end[0], end[1] - 0.12 - h / 2, 'center')]
+      : [at(end[0] + 0.12, end[1] + dy, 'left'), at(end[0] - 0.12, end[1] + dy, 'right'),
+        at(end[0] + out[0] * (0.12 + w / 2), end[1] + out[1] * (0.12 + h / 2), 'center')];
+    return { u, tip, tail, ...spots[0], spots };
+  }
+  // Alle Lastpfeile; jede Beschriftung nimmt die erste Stelle, an der sie keinen anderen Pfeil und keine schon gesetzte
+  // Beschriftung überdeckt (gibt es keine, die erste)
+  function loadGeoms(s) {
+    const gs = st.def.loads.map(ld => loadGeom(ld, s)), boxes = [], pad = 0.06;
+    const over = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    const onArrow = (b, g) => {
+      for (let t = 0; t <= 1.0001; t += 0.1) {
+        const x = g.tail[0] + (g.tip[0] - g.tail[0]) * t, y = g.tail[1] + (g.tip[1] - g.tail[1]) * t;
+        if (x > b[0] - pad && x < b[2] + pad && y > b[1] - pad && y < b[3] + pad) return true;
+      }
+      return false;
+    };
+    gs.forEach((g, k) => {
+      const free = g.spots.find(p => !boxes.some(b => over(p.box, b)) && !gs.some((o, m) => m !== k && onArrow(p.box, o)));
+      Object.assign(g, free || g.spots[0]);
+      boxes.push(g.box);
+    });
+    return gs;
   }
   // Ränder [oben, rechts, unten, links] und Abstand der Bemaßung [unten, seitlich] in Rasterfeldern, right: Höhenmaß rechts.
   // Die Schrift hat eine Mindestgröße: auf schmalen Bildschirmen ist sie größer als vorgesehen, dann wachsen Ränder und
@@ -118,8 +142,7 @@
   function frame(s) {
     if (!st.def.margin) return autoFrame(s);
     const d = st.def, ex = fontPx(s) / s - 0.2, m = d.margin.slice();
-    if (!labelBelow(d)) for (const ld of d.loads) {
-      const g = loadGeom(ld, s);
+    if (!labelBelow(d)) for (const g of loadGeoms(s)) {
       for (const [x, y] of [g.tip, g.tail, [g.box[0], g.box[1]], [g.box[2], g.box[3]]]) {
         m[0] = Math.max(m[0], y - d.ny + 0.25); m[1] = Math.max(m[1], x - d.nx + 0.25);
         m[2] = Math.max(m[2], -y + 0.25); m[3] = Math.max(m[3], -x + 0.25);
@@ -139,8 +162,7 @@
       const out = sp.kind === 'wand' ? 0.2 : sp.kind === 'los' ? 0.65 : 0.55, half = sp.kind === 'wand' ? 0.5 : 0.4;
       for (const [i, j] of sp.nodes) for (const k of [-1, 1]) grow(i + ox * out + t[0] * half * k, j + oy * out + t[1] * half * k);
     }
-    for (const ld of d.loads) {
-      const g = loadGeom(ld, s);
+    for (const g of loadGeoms(s)) {
       grow(...g.tip); grow(...g.tail);
       if (!below) { grow(g.box[0], g.box[1]); grow(g.box[2], g.box[3]); }
     }
@@ -341,15 +363,16 @@
   // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
   const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
   const kNnum = n => fmt(n / 1000, n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer Nachkommastelle
-  // Kraft in kN mit zwei geltenden Ziffern, damit eine kleine Kraft nicht wie null aussieht; unter 0,001 kN mit Zehnerpotenz
+  // Zahl mit zwei geltenden Ziffern, damit ein kleiner Wert nicht wie null aussieht; unter 0,001 mit Zehnerpotenz
   const HOCH = '⁰¹²³⁴⁵⁶⁷⁸⁹';
-  function kNsig(n) {
-    const v = n / 1000;
+  function sig(v) {
+    if (!(v > 0)) return '0';
     let e = Math.floor(Math.log10(v));
     if (+v.toPrecision(2) >= 10 ** (e + 1)) e++;   // gerundet eine Stelle mehr (9,96 wird 10)
     if (e >= -3) return fmt(v, Math.max(0, 1 - e));
     return `${fmt(v / 10 ** e, 1)}·10⁻${[...String(-e)].map(c => HOCH[c]).join('')}`;
   }
+  const kNsig = n => sig(n / 1000);   // Kraft (N) in kN
   const kNm = m => { const v = Math.abs(m) / 1e6; return `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} kNm`; };   // Nmm in kNm
   function barColor(r, k) {
     if (st.out === 'force') return nullStab(r, k) ? C.steel2 : ohneN(r, k) ? BIEGUNG : r.N[k] > 0 ? ZUG : DRUCK;
@@ -446,7 +469,7 @@
   function legendHtml() {
     const bands = lab => '<ol>' + BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : lab(b)}</span></li>`).join('') +
       `<li><i style="background:${OVER}"></i><span>${lab(10)}</span></li></ol>`;
-    if (st.out === 'force') return '<span class="lg-t">Stabkraft in kN</span><ol>' +
+    if (st.out === 'force') return '<span class="lg-t">Stabkraft in kN</span><ol class="cats">' +
       [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab'], [BIEGUNG, 'nur Biegung (Rahmen)']]
         .map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
       '</ol><span>0 heißt null, nicht nur klein: kleine Kräfte stehen mit Wert da; grüne Pfeile: Lagerkräfte</span>';
@@ -550,14 +573,14 @@
     }
   }
 
-  // Lastpfeile (siehe loadGeom); sie wandern mit der Verformung. Gleiche Lasten bekommen eine gemeinsame Beschriftung.
+  // Lastpfeile (siehe loadGeom und loadGeoms); sie wandern mit der Verformung. Gleiche Lasten bekommen eine gemeinsame Beschriftung.
   function drawLoads(v) {
     const s = G.s, d = st.def, r = v.res && v.res.disp && (v.live || !modeShape(v.res)) ? v.res : null;
     const scale = r ? (v.scale || 0) * (v.defo == null ? 1 : v.defo) : 0, hl = s * 0.2, hw = s * 0.09;
     ctx.save(); ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent; ctx.lineWidth = Math.max(2, s * 0.04);
     ctx.font = `600 ${fontPx(s)}px ${MONO}`; ctx.textBaseline = 'middle';
-    const tips = d.loads.map(ld => {
-      const g = loadGeom(ld, s), [nx, ny] = P(ld.node), [mx, my] = nodeXY(r, st.L.id(...ld.node), scale), sh = ([x, y]) => [x + mx - nx, y + my - ny];
+    const gs = loadGeoms(s), tips = d.loads.map((ld, k) => {
+      const g = gs[k], [nx, ny] = P(ld.node), [mx, my] = nodeXY(r, st.L.id(...ld.node), scale), sh = ([x, y]) => [x + mx - nx, y + my - ny];
       const [bx, by] = sh(P(g.tail)), [tx, ty] = sh(P(g.tip)), ux = g.u[0], uy = -g.u[1];
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx - ux * hl, ty - uy * hl); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(tx, ty);
@@ -640,15 +663,16 @@
   function showFem(r, scale, live) {
     let t = '';
     const lam = Number.isFinite(r.lambda) ? `kritischer Lastfaktor ${r.lambda < 10 ? fmt(r.lambda, 2) : 'über 10'}` : '';
+    const dmax = r.disp && !modeShape(r) ? `größte Verschiebung ${sig(maxDisp(r))} mm` : '';   // echt, nicht überhöht
     if (live) t = !r.disp ? '' : r.reason === 'mechanismus' ? `Verformung live als ${NAME[r.model]}: Das Stabwerk gibt nach, es ist beweglich.`
       : r.reason === 'stabil' ? `Verformung live als ${NAME[r.model]}: Das Tragwerk knickt als Ganzes aus.`
-      : `Verformung live als ${NAME[r.model]}, ${overText(scale)}.`;
+      : `Verformung live als ${NAME[r.model]}, ${overText(scale)}, ${dmax}.`;
     else if (r.reason === 'mechanismus') t = `${NAME[r.model]}: Es gibt eine Bewegung, bei der sich kein Stab dehnt; das Stabwerk ist beweglich.`;
     else if (r.reason === 'stabil') t = `${NAME[r.model]}: Stabilitätsprüfung nicht bestanden${lam ? ', ' + lam : ''}. Gezeigt ist die Knickform.`;
     else if (r.disp) {
       const n = FEM.members(st.L, r.fe).length;   // durchgehende Stäbe bestehen aus mehreren Elementen
       t = `${NAME[r.model]}: ${nStab(n)}${n < r.bars ? ` aus ${fmt(r.bars)} Elementen` : ''}, ${fmt(r.dofs)} Freiheitsgrade, gelöst in ${fmt(r.ms, 1)} ms` +
-        (lam ? `, Stabilität: ${lam}` : '') + (scale ? `. Verformung ${overText(scale)}.` : '.');
+        (lam ? `, Stabilität: ${lam}` : '') + (scale ? `. Verformung ${overText(scale)}, ${dmax}.` : `, ${dmax}.`);
     }
     $('femline').textContent = t;
   }
