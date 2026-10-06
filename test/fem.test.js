@@ -287,3 +287,39 @@ test("Knicken ausgeschaltet: ein Druckstab, der knickt, hält, solange er nicht 
   }
 });
 
+test("Nullstäbe: nur Stäbe ohne Kraft, eine kleine Kraft ist kein Nullstab", () => {
+  const LEVELS = require("../src/levels.js");
+  const L = FEM.level(LEVELS[0]), on = Uint8Array.from(L.frozen);
+  for (const b of [[0, 0, 1, 1], [1, 1, 2, 2], [2, 2, 3, 3]]) on[L.barAt(...b)] = 1;
+  // Fachwerk: Am Knoten oben links greift die Last längs des Riegels an, die Stütze bleibt kraftfrei (Nullstab)
+  const t = FEM.analyze(L, on, "truss"), links = [[0, 0, 0, 1], [0, 1, 0, 2], [0, 2, 0, 3]].map(b => L.barAt(...b));
+  for (const k of links) assert.strictEqual(t.zero[k], 1, "linke Stütze ist Nullstab");
+  assert.strictEqual(t.zero[L.barAt(0, 0, 1, 1)], 0, "Diagonale trägt");
+  // Rahmen: dieselbe Stütze trägt eine kleine Kraft und Biegung, sie ist kein Nullstab
+  const f = FEM.analyze(L, on, "frame");
+  for (const k of links) {
+    assert.ok(Math.abs(f.N[k]) > 0 && Math.abs(f.N[k]) < 0.01 * F, `kleine Kraft ${f.N[k]}`);
+    assert.strictEqual(f.zero[k], 0, "kleine Kraft ist kein Nullstab");
+  }
+  // Kragbalken im Rahmen: keine Normalkraft, aber Biegung. Das ist kein Nullstab (zero 2), auch wenn nirgends Normalkraft wirkt
+  const K = FEM.level({ nx: 4, ny: 1, supports: [{ kind: "wand", nodes: [[0, 0], [0, 1]], side: "left", fix: 7 }],
+    loads: [{ node: [4, 0], fx: 0, fy: -F }] });
+  const kb = [[0, 0, 1, 0], [1, 0, 2, 0], [2, 0, 3, 0], [3, 0, 4, 0]], r = FEM.analyze(K, only(K, kb), "frame");
+  for (const b of kb) assert.strictEqual(r.zero[K.barAt(...b)], 2, "Kragbalken trägt auf Biegung");
+});
+
+test("Eigengewicht im Fachwerk: Ein gerader Stabzug gibt sein Gewicht an seine Enden ab wie ein Einfeldträger", () => {
+  // Stabzug über zwei Durchlaufstellen, rechts das schwerste Profil; quer an den Durchlaufstellen wäre er beweglich
+  const L = FEM.level({ nx: 3, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 },
+    { kind: "los", nodes: [[3, 0]], side: "bottom", fix: 2 }], loads: [{ node: [3, 0], fx: -4000, fy: 0 }] });
+  const segs = [[0, 0, 1, 0], [1, 0, 2, 0], [2, 0, 3, 0]], on = only(L, segs);
+  on[L.barAt(2, 0, 3, 0)] = 3;
+  L.opts = { gravity: true, buckling: true };
+  const r = FEM.analyze(L, on, "truss"), R = new Map(r.react.map(([q, , y]) => [q, y]));
+  assert.ok(r.ok, `Fachwerk mit Eigengewicht: ${r.reason}`);
+  const w = segs.map(b => FEM.mass(L, on, only(L, [b])) * 9.81), right = w.reduce((a, wi, i) => a + wi * (i + 0.5) / 3, 0);
+  near(R.get(L.id(3, 0)), right, 1e-9, "rechtes Lager");
+  near(R.get(L.id(0, 0)), w[0] + w[1] + w[2] - right, 1e-9, "linkes Lager");
+  for (const b of segs) near(r.N[L.barAt(...b)], -4000, 1e-9, "Stabkraft im ganzen Zug gleich");
+});
+

@@ -259,7 +259,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         <div class="model" id="set-row" role="group" aria-label="Einstellungen">
           <span>Mit</span>
           <span class="tools">
-            <button type="button" id="set-grav" aria-pressed="false" title="Eigengewicht der Stäbe als Last (je Stab Masse mal g, halb an jedes Ende)">Eigengewicht</button>
+            <button type="button" id="set-grav" aria-pressed="false" title="Eigengewicht der Stäbe als Last (je Stab Masse mal g, an seine Enden)">Eigengewicht</button>
             <button type="button" id="set-buck" aria-pressed="true" title="Knicken der Druckstäbe und des Ganzen prüfen">Knicken</button>
           </span>
         </div>
@@ -313,8 +313,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer hält.</li>
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet, und er zählt als ein Stab.</li>
             <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts und zählen bei der Masse. Im Fachwerk drehen sie sich um ihren Knoten: Dann ist das Fachwerk verschieblich, wie nach dem Abzählkriterium.</li>
-            <li><b>Eigengewicht</b> (Einstellung „Mit“): je tragendem Stab Masse mal g = 9,81 m/s², je zur Hälfte an seine beiden Knoten. <b>Knicken</b> ausgeschaltet prüft nur Fließen, ohne Knicken der Stäbe und des Ganzen; die Knicklasten zeigt das Spiel weiter zur Info. Der Gegner rechnet mit denselben Einstellungen.</li>
-            <li><b>Werte</b> unter der Zeichnung, sobald Farben zu sehen sind: Auslastung, Kräfte (Stabkraft N in kN, Zug +, Druck −, Nullstäbe grau; Lagerkräfte als grüne Pfeile), Spannungen (|N| / A + |M|max / W in MPa) und Knicklasten (π² E I / Lk² in kN, Farbe: Druckkraft je Knicklast).</li>
+            <li><b>Eigengewicht</b> (Einstellung „Mit“): je tragendem Stab Masse mal g = 9,81 m/s², verteilt auf seine Enden wie beim Einfeldträger (im Fachwerk ist ein gerader Stabzug ein Stab). <b>Knicken</b> ausgeschaltet prüft nur Fließen, ohne Knicken der Stäbe und des Ganzen; die Knicklasten zeigt das Spiel weiter zur Info. Der Gegner rechnet mit denselben Einstellungen.</li>
+            <li><b>Werte</b> unter der Zeichnung, sobald Farben zu sehen sind: Auslastung, Kräfte (Stabkraft N in kN, Zug +, Druck −; 0 nur, wenn die Kraft null ist, nicht nur klein: Nullstab grau, im Rahmen nur Biegung violett; Lagerkräfte als grüne Pfeile), Spannungen (|N| / A + |M|max / W in MPa) und Knicklasten (π² E I / Lk² in kN, Farbe: Druckkraft je Knicklast).</li>
             <li><b>Abzählkriterium</b> (Schriftfeld): k Knoten, s Stäbe, r Lagerreaktionen (Festlager 2, Loslager 1, Einspannung je Knoten 2 im Fachwerk, 3 im Rahmen). Fachwerk f = 2k − s − r, Rahmen f = 3k − 3s − r. f &gt; 0 heißt verschieblich, f = 0 statisch bestimmt, f &lt; 0 so oft statisch unbestimmt. Ist es trotz f ≤ 0 verschieblich, ist es ein Ausnahmefall; den findet die Rechnung.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
             <li><b>Zufall und Baukasten:</b> Zu jeder Nummer gehört ein festes Bauteil, gleich auf jedem Gerät. Die Lasten sind so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, auf glatte Beträge gerundet. So ist jedes Bauteil lösbar: Das volle Raster hält als Fachwerk und als Rahmen. Im Baukasten gilt das auch für selbst gesetzte Beträge.</li>
@@ -328,7 +328,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li>Die Stabilitätsprüfung des Ganzen rechnet je Stab ein Element. Für einzelne Stäbe ist sie dadurch etwas zu günstig, dort gilt der Euler-Nachweis je Stab.</li>
             <li>Nur in der Ebene: Knicken aus der Ebene und Biegedrillknicken fehlen. Verformungen werden nicht begrenzt; ein Rahmen ohne Diagonale schwankt oft weit mehr, als man in echt zuließe.</li>
             <li>Knoten sind Punkte: Knotenbleche, Schrauben und Schweißnähte fehlen. Kreuzende Diagonalen sind nicht miteinander verbunden.</li>
-            <li>Lasten greifen nur in Knoten an, Eigengewicht fehlt.</li>
+            <li>Lasten greifen nur in Knoten an, auch das Eigengewicht (Einstellung) wird auf die Knoten verteilt.</li>
             <li>Echte Fachwerke haben meist steife Knoten. Die Biegung, die dadurch entsteht, heißt Nebenspannung: Die Ansicht „Rahmen“ zeigt, wie groß sie ist.</li>
           </ul>
         </details>
@@ -359,6 +359,9 @@ const FEM = (() => {
     return [Math.max(uy, uk), uk > uy];
   }
   const G_ACC = 9.81;   // Erdbeschleunigung in m/s², fürs Eigengewicht
+  // Nullstab: Normalkraft (und Moment) höchstens so viel der größten Schnittgröße. Rundungsreste liegen darunter (Fachwerk
+  // unter 1e-12, Rahmen unter 1e-9), echte kleine Kräfte im Fachwerk ab etwa 1e-5.
+  const ZERO = 1e-8;
   // Einstellungen des Spiels je Bauteil (L.opts): gravity Eigengewicht der Stäbe, buckling Knicken (Stab und Ganzes)
   const optsOf = L => ({ gravity: !!(L.opts && L.opts.gravity), buckling: !(L.opts && L.opts.buckling === false) });
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
@@ -559,7 +562,8 @@ const FEM = (() => {
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
       util: new Float64Array(L.nB), N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB),
       fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1, disp: null, lambda: NaN, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0,
-      sigma: new Float64Array(L.nB), ncr: new Float64Array(L.nB), react: [] };   // Spannung in MPa, Knicklast in N, Lagerkräfte
+      sigma: new Float64Array(L.nB), ncr: new Float64Array(L.nB), react: [], zero: new Uint8Array(L.nB) };   // Spannung in MPa,
+    // Knicklast in N, Lagerkräfte, echte Nullstäbe
     const { gravity, buckling } = optsOf(L);
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
@@ -691,11 +695,23 @@ const FEM = (() => {
       if (eq[q * 3] >= 0) x[eq[q * 3]] += L.fx[q];
       if (eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += L.fy[q];
     }
-    // Eigengewicht (Einstellung): je tragendem Stab Masse mal g, je zur Hälfte an seine beiden Knoten
+    // Eigengewicht (Einstellung): Masse mal g je tragendem Stab, an die Knoten verteilt wie die Lagerkräfte eines Einfeldträgers.
+    // Im Fachwerk ist ein gerader Stabzug ein Stab: Sein Gewicht geht an die Enden des Zugs, nicht quer an die Durchlaufstellen.
     const gy = new Float64Array(gravity ? L.nN : 0);
-    if (gravity) for (const el of els) {
-      const w = el.b.len * el.p.kgmm * G_ACC / 2;
-      gy[el.b.a] -= w; gy[el.b.b] -= w;
+    if (gravity) {
+      const elOf = [];
+      for (const el of els) elOf[el.k] = el;
+      for (const chain of frame ? els.map(el => [el.k]) : members(L, fe)) {
+        const seen = new Map();
+        for (const k of chain) for (const q of [L.bars[k].a, L.bars[k].b]) seen.set(q, (seen.get(q) || 0) + 1);
+        const [a, z] = [...seen].filter(([, c]) => c === 1).map(([q]) => q);
+        const [ax, ay] = L.ij[a], dx = L.ij[z][0] - ax, dy = L.ij[z][1] - ay;
+        for (const k of chain) {
+          const { b, p } = elOf[k], w = b.len * p.kgmm * G_ACC;
+          const t = (((L.ij[b.a][0] + L.ij[b.b][0]) / 2 - ax) * dx + ((L.ij[b.a][1] + L.ij[b.b][1]) / 2 - ay) * dy) / (dx * dx + dy * dy);
+          gy[a] -= w * (1 - t); gy[z] -= w * t;
+        }
+      }
     }
     for (let q = 0; q < gy.length; q++) if (gy[q] && eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += gy[q];
     const f = Float64Array.from(x);
@@ -711,6 +727,16 @@ const FEM = (() => {
       for (const q of L.loadNodes) loaded[q] = 1;
       res.disp = toDisp(x, true, loaded);
       return done('mechanismus');
+    }
+    // Die Hilfsfedern S tragen einen winzigen Teil der Last mit (im Rahmen bis etwa 1e-5). Zwei Korrekturschritte geben ihn dem
+    // Tragwerk zurück (Rest von K x = f ist S mal der letzten Korrektur), sonst hätte ein Nullstab eine Kraft aus den Federn.
+    // Nur für die Anzeige: Bemessung und Gegner (quick) brauchen das nicht, so bleiben ihre Ergebnisse unverändert.
+    if (!quick) {
+      const back = Float64Array.from(x, (v, p) => ks[p] * v);
+      for (let it = 0; it < 2; it++) {
+        solve(A, back);
+        for (let p = 0; p < n; p++) { x[p] += back[p]; back[p] *= ks[p]; }
+      }
     }
     const disp = toDisp(x, false);
 
@@ -744,6 +770,17 @@ const FEM = (() => {
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.nYield = nY; res.nBuckle = nK;
+    // Normalkraft null bis auf Rundungsreste, gemessen an der größten Schnittgröße im Tragwerk (Normalkraft oder Moment je
+    // Rasterlänge, so stimmt es auch, wenn nichts Normalkraft trägt, etwa beim Kragbalken). zero 1: echter Nullstab (im Rahmen
+    // auch ohne Biegung), zero 2: nur Biegung (Rahmen). Eine kleine Kraft ist kein Nullstab. Nur für die Anzeige.
+    if (!quick) {
+      let ref = 0;
+      for (const el of els) ref = Math.max(ref, Math.abs(el.N), Math.abs(res.M[2 * el.k]) / GRID, Math.abs(res.M[2 * el.k + 1]) / GRID);
+      for (const el of els) {
+        const k = el.k;
+        if (Math.abs(el.N) <= ZERO * ref) res.zero[k] = Math.max(Math.abs(res.M[2 * k]), Math.abs(res.M[2 * k + 1])) <= ZERO * ref * GRID ? 1 : 2;
+      }
+    }
     // Lagerkraft R = Summe der Stabendkräfte minus äußere Last am Knoten (Last, Eigengewicht); [Knoten, Rx, Ry, Moment]
     for (const [q, r] of react) res.react.push([q, r[0] - L.fx[q], r[1] - L.fy[q] - (gravity ? gy[q] : 0), frame ? r[2] : 0]);
 
@@ -1603,18 +1640,27 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
     if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && !modeShape(r) ? bandOf(r.util[k]) : C.steel);
   }
-  // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, Zahl in kN; dazu
-  // Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
+  // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, im Rahmen nur Biegung
+  // violett, Zahl in kN; dazu Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
   // Zahl: Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
-  const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)';
-  const nMax = r => r._nMax ?? (r._nMax = Math.max(0, ...Array.from(r.N, (n, k) => r.fe[k] ? Math.abs(n) : 0)));
-  const nullStab = (r, k) => Math.abs(r.N[k]) < 1e-3 * nMax(r);
+  const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)', BIEGUNG = 'rgb(138,76,196)';
+  // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
+  const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
   const kNnum = n => fmt(n / 1000, n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer Nachkommastelle
+  // Kraft in kN mit zwei geltenden Ziffern, damit eine kleine Kraft nicht wie null aussieht; unter 0,001 kN mit Zehnerpotenz
+  const HOCH = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  function kNsig(n) {
+    const v = n / 1000;
+    let e = Math.floor(Math.log10(v));
+    if (+v.toPrecision(2) >= 10 ** (e + 1)) e++;   // gerundet eine Stelle mehr (9,96 wird 10)
+    if (e >= -3) return fmt(v, Math.max(0, 1 - e));
+    return `${fmt(v / 10 ** e, 1)}·10⁻${[...String(-e)].map(c => HOCH[c]).join('')}`;
+  }
   const kNm = m => { const v = Math.abs(m) / 1e6; return `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} kNm`; };   // Nmm in kNm
   function barColor(r, k) {
-    if (st.out === 'force') return nullStab(r, k) ? C.steel2 : r.N[k] > 0 ? ZUG : DRUCK;
+    if (st.out === 'force') return nullStab(r, k) ? C.steel2 : ohneN(r, k) ? BIEGUNG : r.N[k] > 0 ? ZUG : DRUCK;
     if (st.out === 'stress') return bandOf(r.sigma[k] / FEM.RE);
-    if (st.out === 'buckle') return r.N[k] < 0 && !nullStab(r, k) ? bandOf(-r.N[k] / r.ncr[k]) : C.steel2;
+    if (st.out === 'buckle') return r.N[k] < 0 && !ohneN(r, k) ? bandOf(-r.N[k] / r.ncr[k]) : C.steel2;
     return bandOf(r.util[k]);
   }
   function drawValues(r, pts) {
@@ -1627,12 +1673,12 @@ if (typeof module !== 'undefined') module.exports = PARTS;
       let t, rank;   // rank: wichtigere Zahlen zuerst, bei Platzmangel fallen die unwichtigen weg
       if (st.out === 'force') {
         const k = seg.reduce((a, b) => Math.abs(r.N[b]) > Math.abs(r.N[a]) ? b : a);
-        t = nullStab(r, k) ? '0' : (r.N[k] > 0 ? '+' : '−') + kNnum(Math.abs(r.N[k]));
+        t = ohneN(r, k) ? '0' : (r.N[k] > 0 ? '+' : '−') + kNsig(Math.abs(r.N[k]));
         rank = Math.abs(r.N[k]);
       } else if (st.out === 'stress') t = fmt(rank = Math.max(...seg.map(k => r.sigma[k])));
       else {
         const k = seg.reduce((a, b) => r.N[b] < r.N[a] ? b : a);
-        if (!(r.N[k] < 0) || nullStab(r, k)) continue;
+        if (!(r.N[k] < 0) || ohneN(r, k)) continue;
         t = kNnum(r.ncr[k]); rank = -r.N[k] / r.ncr[k];
       }
       items.push([x / seg.length, y / seg.length, t, rank]);
@@ -1707,8 +1753,9 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     const bands = lab => '<ol>' + BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : lab(b)}</span></li>`).join('') +
       `<li><i style="background:${OVER}"></i><span>${lab(10)}</span></li></ol>`;
     if (st.out === 'force') return '<span class="lg-t">Stabkraft in kN</span><ol>' +
-      [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab']].map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
-      '</ol><span>grüne Pfeile: Lagerkräfte</span>';
+      [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab'], [BIEGUNG, 'nur Biegung (Rahmen)']]
+        .map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
+      '</ol><span>0 heißt null, nicht nur klein: kleine Kräfte stehen mit Wert da; grüne Pfeile: Lagerkräfte</span>';
     if (st.out === 'stress') return `<span class="lg-t">Spannung je Stab in MPa</span>${bands(b => fmt(FEM.RE * b / 10))}<span>über ${FEM.RE} MPa fließt der Stab</span>`;
     if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
       `<span>${st.buck ? 'über 100 % knickt der Stab' : 'Knicken ist ausgeschaltet, nur zur Info'}; Zugstäbe grau</span>`;

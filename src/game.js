@@ -334,18 +334,27 @@
     else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
     if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && !modeShape(r) ? bandOf(r.util[k]) : C.steel);
   }
-  // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, Zahl in kN; dazu
-  // Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
+  // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, im Rahmen nur Biegung
+  // violett, Zahl in kN; dazu Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
   // Zahl: Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
-  const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)';
-  const nMax = r => r._nMax ?? (r._nMax = Math.max(0, ...Array.from(r.N, (n, k) => r.fe[k] ? Math.abs(n) : 0)));
-  const nullStab = (r, k) => Math.abs(r.N[k]) < 1e-3 * nMax(r);
+  const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)', BIEGUNG = 'rgb(138,76,196)';
+  // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
+  const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
   const kNnum = n => fmt(n / 1000, n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer Nachkommastelle
+  // Kraft in kN mit zwei geltenden Ziffern, damit eine kleine Kraft nicht wie null aussieht; unter 0,001 kN mit Zehnerpotenz
+  const HOCH = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  function kNsig(n) {
+    const v = n / 1000;
+    let e = Math.floor(Math.log10(v));
+    if (+v.toPrecision(2) >= 10 ** (e + 1)) e++;   // gerundet eine Stelle mehr (9,96 wird 10)
+    if (e >= -3) return fmt(v, Math.max(0, 1 - e));
+    return `${fmt(v / 10 ** e, 1)}·10⁻${[...String(-e)].map(c => HOCH[c]).join('')}`;
+  }
   const kNm = m => { const v = Math.abs(m) / 1e6; return `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} kNm`; };   // Nmm in kNm
   function barColor(r, k) {
-    if (st.out === 'force') return nullStab(r, k) ? C.steel2 : r.N[k] > 0 ? ZUG : DRUCK;
+    if (st.out === 'force') return nullStab(r, k) ? C.steel2 : ohneN(r, k) ? BIEGUNG : r.N[k] > 0 ? ZUG : DRUCK;
     if (st.out === 'stress') return bandOf(r.sigma[k] / FEM.RE);
-    if (st.out === 'buckle') return r.N[k] < 0 && !nullStab(r, k) ? bandOf(-r.N[k] / r.ncr[k]) : C.steel2;
+    if (st.out === 'buckle') return r.N[k] < 0 && !ohneN(r, k) ? bandOf(-r.N[k] / r.ncr[k]) : C.steel2;
     return bandOf(r.util[k]);
   }
   function drawValues(r, pts) {
@@ -358,12 +367,12 @@
       let t, rank;   // rank: wichtigere Zahlen zuerst, bei Platzmangel fallen die unwichtigen weg
       if (st.out === 'force') {
         const k = seg.reduce((a, b) => Math.abs(r.N[b]) > Math.abs(r.N[a]) ? b : a);
-        t = nullStab(r, k) ? '0' : (r.N[k] > 0 ? '+' : '−') + kNnum(Math.abs(r.N[k]));
+        t = ohneN(r, k) ? '0' : (r.N[k] > 0 ? '+' : '−') + kNsig(Math.abs(r.N[k]));
         rank = Math.abs(r.N[k]);
       } else if (st.out === 'stress') t = fmt(rank = Math.max(...seg.map(k => r.sigma[k])));
       else {
         const k = seg.reduce((a, b) => r.N[b] < r.N[a] ? b : a);
-        if (!(r.N[k] < 0) || nullStab(r, k)) continue;
+        if (!(r.N[k] < 0) || ohneN(r, k)) continue;
         t = kNnum(r.ncr[k]); rank = -r.N[k] / r.ncr[k];
       }
       items.push([x / seg.length, y / seg.length, t, rank]);
@@ -438,8 +447,9 @@
     const bands = lab => '<ol>' + BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : lab(b)}</span></li>`).join('') +
       `<li><i style="background:${OVER}"></i><span>${lab(10)}</span></li></ol>`;
     if (st.out === 'force') return '<span class="lg-t">Stabkraft in kN</span><ol>' +
-      [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab']].map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
-      '</ol><span>grüne Pfeile: Lagerkräfte</span>';
+      [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab'], [BIEGUNG, 'nur Biegung (Rahmen)']]
+        .map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
+      '</ol><span>0 heißt null, nicht nur klein: kleine Kräfte stehen mit Wert da; grüne Pfeile: Lagerkräfte</span>';
     if (st.out === 'stress') return `<span class="lg-t">Spannung je Stab in MPa</span>${bands(b => fmt(FEM.RE * b / 10))}<span>über ${FEM.RE} MPa fließt der Stab</span>`;
     if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
       `<span>${st.buck ? 'über 100 % knickt der Stab' : 'Knicken ist ausgeschaltet, nur zur Info'}; Zugstäbe grau</span>`;

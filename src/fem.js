@@ -17,6 +17,9 @@ const FEM = (() => {
     return [Math.max(uy, uk), uk > uy];
   }
   const G_ACC = 9.81;   // Erdbeschleunigung in m/s², fürs Eigengewicht
+  // Nullstab: Normalkraft (und Moment) höchstens so viel der größten Schnittgröße. Rundungsreste liegen darunter (Fachwerk
+  // unter 1e-12, Rahmen unter 1e-9), echte kleine Kräfte im Fachwerk ab etwa 1e-5.
+  const ZERO = 1e-8;
   // Einstellungen des Spiels je Bauteil (L.opts): gravity Eigengewicht der Stäbe, buckling Knicken (Stab und Ganzes)
   const optsOf = L => ({ gravity: !!(L.opts && L.opts.gravity), buckling: !(L.opts && L.opts.buckling === false) });
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
@@ -217,7 +220,8 @@ const FEM = (() => {
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
       util: new Float64Array(L.nB), N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB),
       fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1, disp: null, lambda: NaN, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0,
-      sigma: new Float64Array(L.nB), ncr: new Float64Array(L.nB), react: [] };   // Spannung in MPa, Knicklast in N, Lagerkräfte
+      sigma: new Float64Array(L.nB), ncr: new Float64Array(L.nB), react: [], zero: new Uint8Array(L.nB) };   // Spannung in MPa,
+    // Knicklast in N, Lagerkräfte, echte Nullstäbe
     const { gravity, buckling } = optsOf(L);
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
@@ -349,11 +353,23 @@ const FEM = (() => {
       if (eq[q * 3] >= 0) x[eq[q * 3]] += L.fx[q];
       if (eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += L.fy[q];
     }
-    // Eigengewicht (Einstellung): je tragendem Stab Masse mal g, je zur Hälfte an seine beiden Knoten
+    // Eigengewicht (Einstellung): Masse mal g je tragendem Stab, an die Knoten verteilt wie die Lagerkräfte eines Einfeldträgers.
+    // Im Fachwerk ist ein gerader Stabzug ein Stab: Sein Gewicht geht an die Enden des Zugs, nicht quer an die Durchlaufstellen.
     const gy = new Float64Array(gravity ? L.nN : 0);
-    if (gravity) for (const el of els) {
-      const w = el.b.len * el.p.kgmm * G_ACC / 2;
-      gy[el.b.a] -= w; gy[el.b.b] -= w;
+    if (gravity) {
+      const elOf = [];
+      for (const el of els) elOf[el.k] = el;
+      for (const chain of frame ? els.map(el => [el.k]) : members(L, fe)) {
+        const seen = new Map();
+        for (const k of chain) for (const q of [L.bars[k].a, L.bars[k].b]) seen.set(q, (seen.get(q) || 0) + 1);
+        const [a, z] = [...seen].filter(([, c]) => c === 1).map(([q]) => q);
+        const [ax, ay] = L.ij[a], dx = L.ij[z][0] - ax, dy = L.ij[z][1] - ay;
+        for (const k of chain) {
+          const { b, p } = elOf[k], w = b.len * p.kgmm * G_ACC;
+          const t = (((L.ij[b.a][0] + L.ij[b.b][0]) / 2 - ax) * dx + ((L.ij[b.a][1] + L.ij[b.b][1]) / 2 - ay) * dy) / (dx * dx + dy * dy);
+          gy[a] -= w * (1 - t); gy[z] -= w * t;
+        }
+      }
     }
     for (let q = 0; q < gy.length; q++) if (gy[q] && eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += gy[q];
     const f = Float64Array.from(x);
@@ -369,6 +385,16 @@ const FEM = (() => {
       for (const q of L.loadNodes) loaded[q] = 1;
       res.disp = toDisp(x, true, loaded);
       return done('mechanismus');
+    }
+    // Die Hilfsfedern S tragen einen winzigen Teil der Last mit (im Rahmen bis etwa 1e-5). Zwei Korrekturschritte geben ihn dem
+    // Tragwerk zurück (Rest von K x = f ist S mal der letzten Korrektur), sonst hätte ein Nullstab eine Kraft aus den Federn.
+    // Nur für die Anzeige: Bemessung und Gegner (quick) brauchen das nicht, so bleiben ihre Ergebnisse unverändert.
+    if (!quick) {
+      const back = Float64Array.from(x, (v, p) => ks[p] * v);
+      for (let it = 0; it < 2; it++) {
+        solve(A, back);
+        for (let p = 0; p < n; p++) { x[p] += back[p]; back[p] *= ks[p]; }
+      }
     }
     const disp = toDisp(x, false);
 
@@ -402,6 +428,17 @@ const FEM = (() => {
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.nYield = nY; res.nBuckle = nK;
+    // Normalkraft null bis auf Rundungsreste, gemessen an der größten Schnittgröße im Tragwerk (Normalkraft oder Moment je
+    // Rasterlänge, so stimmt es auch, wenn nichts Normalkraft trägt, etwa beim Kragbalken). zero 1: echter Nullstab (im Rahmen
+    // auch ohne Biegung), zero 2: nur Biegung (Rahmen). Eine kleine Kraft ist kein Nullstab. Nur für die Anzeige.
+    if (!quick) {
+      let ref = 0;
+      for (const el of els) ref = Math.max(ref, Math.abs(el.N), Math.abs(res.M[2 * el.k]) / GRID, Math.abs(res.M[2 * el.k + 1]) / GRID);
+      for (const el of els) {
+        const k = el.k;
+        if (Math.abs(el.N) <= ZERO * ref) res.zero[k] = Math.max(Math.abs(res.M[2 * k]), Math.abs(res.M[2 * k + 1])) <= ZERO * ref * GRID ? 1 : 2;
+      }
+    }
     // Lagerkraft R = Summe der Stabendkräfte minus äußere Last am Knoten (Last, Eigengewicht); [Knoten, Rx, Ry, Moment]
     for (const [q, r] of react) res.react.push([q, r[0] - L.fx[q], r[1] - L.fy[q] - (gravity ? gy[q] : 0), frame ? r[2] : 0]);
 
