@@ -50,10 +50,17 @@
   const st = { li: 0, key: '0', def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
     model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' },
     prof: 1, liveDef: store.get('live-def') !== false, liveUtil: store.get('live-util') === true, liveRef: {},
-    hover: null, drag: null, eso: {}, esoRun: null, animId: 0, busy: false };
+    hover: null, drag: null, eso: {}, esoRun: null, animId: 0, busy: false,
+    // grav: Eigengewicht, buck: Knicken prüfen (allein gemerkt, im Wettkampf von der Spielleitung); out: angezeigte Werte
+    grav: store.get('grav') === true, buck: store.get('buck') !== false,
+    out: ['util', 'force', 'stress', 'buckle'].includes(store.get('werte')) ? store.get('werte') : 'util' };
   let G = null;
   const C = {};
   const startOn = L => Uint8Array.from(L.frozen);   // Start: nur die gesperrten Stäbe, im dünnsten Profil
+  // Einstellungen im Rechenkern (je Bauteil), im Schlüssel der Zwischenspeicher und als Text
+  const applyOpts = () => { st.L.opts = { gravity: st.grav, buckling: st.buck }; };
+  const optsKey = () => (st.grav ? '-g' : '') + (st.buck ? '' : '-k');
+  const optsText = () => (st.grav ? ', mit Eigengewicht' : '') + (st.buck ? '' : ', ohne Knicken');
   const kg = (on, set) => FEM.mass(st.L, on, set);
   // Stäbe zählen wie in der Statik: Ein gerader Stabzug über Durchlaufstellen ist ein Stab (FEM.members). on: Profil je
   // Rasterstab, nur die, die zählen. count: Zahl der Stäbe, text: nach Profil, Stäbe mit wechselndem Profil als „gemischt“
@@ -70,7 +77,7 @@
 
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
-    for (const t of ['sheet', 'ink', 'ink2', 'rule', 'grid', 'steel', 'steel2', 'hatch', 'accent', 'loose', 'bad'])
+    for (const t of ['sheet', 'ink', 'ink2', 'rule', 'grid', 'steel', 'steel2', 'hatch', 'accent', 'loose', 'bad', 'ok'])
       C[t] = cs.getPropertyValue('--' + t).trim();
   }
 
@@ -190,7 +197,7 @@
   // sehr weiche und bewegliche Entwürfe laufen sanft gegen die Obergrenze DEFO_LIVE_MAX
   function liveScale(r) {
     if (!r.disp) return 0;
-    const key = st.key + '-' + r.model, cap = DEFO_LIVE_MAX * size();
+    const key = st.key + '-' + r.model + optsKey(), cap = DEFO_LIVE_MAX * size();
     if (!st.liveRef[key]) st.liveRef[key] = DEFO_LIVE * size() / maxDisp(FEM.analyze(st.L, Uint8Array.from(st.L.domain, () => 2), r.model));
     const m = maxDisp(r);
     return m ? cap * Math.tanh(m * st.liveRef[key] / cap) / m : st.liveRef[key];
@@ -313,7 +320,7 @@
       const pulse = 0.25 + 0.2 * Math.sin((v.t || 0) / 70);
       pts.forEach((p, k) => {
         if (!p) return;
-        strokeBar(p, bwOf(on[k]), colors ? bandOf(r.util[k]) : L.frozen[k] ? C.steel2 : C.steel);
+        strokeBar(p, bwOf(on[k]), colors ? barColor(r, k) : L.frozen[k] ? C.steel2 : C.steel);
         if (colors && r.fail[k]) {
           strokeBar(p, bwOf(on[k]), `rgba(255,255,255,${pulse})`);
           if (r.fail[k] === 2) drawBuckle(p, bwOf(on[k])); else drawCrack(p, bwOf(on[k]));
@@ -321,12 +328,129 @@
       });
       ctx.restore();
       drawNodes(pts.map((p, k) => p ? k : -1).filter(k => k >= 0), on, r.model, n => nodeXY(r, n, scale), r.pass);
-      if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) drawMax(r, pts[r.maxBar]);
+      if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) { if (st.out === 'util') drawMax(r, pts[r.maxBar]); else drawValues(r, pts); }
     }
     if (v.loose) drawFalling(v.loose.set, v.loose.p, on, () => C.steel);
     else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
     if (v.fall) drawFalling(v.fall.set, v.fall.p, on, k => r.disp && r.fe[k] && !modeShape(r) ? bandOf(r.util[k]) : C.steel);
   }
+  // Werte zur Auswahl (st.out): Auslastung (Farbe), Kräfte (Stabkraft: Zug blau, Druck rot, Nullstab grau, Zahl in kN; dazu
+  // Lagerkräfte als grüne Pfeile), Spannungen (Farbe und Zahl in MPa), Knicklasten (Druckstäbe nach Druckkraft je Knicklast,
+  // Zahl: Knicklast in kN; Zugstäbe grau). Zahlen je Stab, ein gerader Stabzug ist ein Stab.
+  const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)';
+  const nMax = r => r._nMax ?? (r._nMax = Math.max(0, ...Array.from(r.N, (n, k) => r.fe[k] ? Math.abs(n) : 0)));
+  const nullStab = (r, k) => Math.abs(r.N[k]) < 1e-3 * nMax(r);
+  const kNnum = n => fmt(n / 1000, n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer Nachkommastelle
+  const kNm = m => { const v = Math.abs(m) / 1e6; return `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} kNm`; };   // Nmm in kNm
+  function barColor(r, k) {
+    if (st.out === 'force') return nullStab(r, k) ? C.steel2 : r.N[k] > 0 ? ZUG : DRUCK;
+    if (st.out === 'stress') return bandOf(r.sigma[k] / FEM.RE);
+    if (st.out === 'buckle') return r.N[k] < 0 && !nullStab(r, k) ? bandOf(-r.N[k] / r.ncr[k]) : C.steel2;
+    return bandOf(r.util[k]);
+  }
+  function drawValues(r, pts) {
+    const s = G.s, items = [];
+    for (const m of FEM.members(st.L, r.fe)) {
+      const seg = m.filter(k => pts[k]);
+      if (!seg.length) continue;
+      let x = 0, y = 0;
+      for (const k of seg) { const a = pts[k][0], b = pts[k].at(-1); x += (a[0] + b[0]) / 2; y += (a[1] + b[1]) / 2; }
+      let t, rank;   // rank: wichtigere Zahlen zuerst, bei Platzmangel fallen die unwichtigen weg
+      if (st.out === 'force') {
+        const k = seg.reduce((a, b) => Math.abs(r.N[b]) > Math.abs(r.N[a]) ? b : a);
+        t = nullStab(r, k) ? '0' : (r.N[k] > 0 ? '+' : '−') + kNnum(Math.abs(r.N[k]));
+        rank = Math.abs(r.N[k]);
+      } else if (st.out === 'stress') t = fmt(rank = Math.max(...seg.map(k => r.sigma[k])));
+      else {
+        const k = seg.reduce((a, b) => r.N[b] < r.N[a] ? b : a);
+        if (!(r.N[k] < 0) || nullStab(r, k)) continue;
+        t = kNnum(r.ncr[k]); rank = -r.N[k] / r.ncr[k];
+      }
+      items.push([x / seg.length, y / seg.length, t, rank]);
+    }
+    ctx.save(); ctx.font = `600 ${Math.max(10, s * 0.15)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const h = Math.max(14, s * 0.21), placed = [];
+    for (const [x, y, t] of items.sort((a, b) => b[3] - a[3])) {
+      const w = ctx.measureText(t).width + 6, box = [x - w / 2, y - h / 2, x + w / 2, y + h / 2];
+      if (placed.some(q => box[0] < q[2] && q[0] < box[2] && box[1] < q[3] && q[1] < box[3])) continue;   // kein Platz
+      placed.push(box);
+      ctx.fillStyle = C.sheet; ctx.globalAlpha = 0.85; ctx.fillRect(box[0], box[1], w, h);
+      ctx.globalAlpha = 1; ctx.fillStyle = C.ink; ctx.fillText(t, x, y);
+    }
+    ctx.restore();
+    if (st.out === 'force') drawReactions(r);
+  }
+  // Lagerkräfte: Pfeil in Richtung der Kraft, die das Lager aufs Tragwerk ausübt, mit Betrag (im Rahmen an Einspannungen dazu
+  // das Moment). Der Pfeil liegt immer auf der Lagerseite außen: zeigt die Kraft ins Tragwerk, endet er am Knoten, sonst
+  // beginnt er dort.
+  function drawReactions(r) {
+    const s = G.s, max = Math.max(0, ...r.react.map(([, x, y]) => Math.hypot(x, y))), hl = s * 0.18, hw = s * 0.08;
+    if (!max) return;
+    // je Lager ein Pfeil; eine Einspannung über mehrere Knoten wie in der TM als Resultierende in ihrer Mitte mit Moment
+    const byNode = new Map(r.react.map(([q, ...v]) => [q, v])), sideAt = new Map(), list = [];
+    for (const sp of st.def.supports) {
+      const qs = sp.nodes.map(([i, j]) => st.L.id(i, j)).filter(q => byNode.has(q));
+      if (!qs.length) continue;
+      const [ci, cj] = [qs.reduce((a, q) => a + st.L.ij[q][0], 0) / qs.length, qs.reduce((a, q) => a + st.L.ij[q][1], 0) / qs.length];
+      const m = qs.reduce((a, q) => Math.hypot(st.L.ij[q][0] - ci, st.L.ij[q][1] - cj) < Math.hypot(st.L.ij[a][0] - ci, st.L.ij[a][1] - cj) ? q : a);
+      const groups = sp.kind === 'wand' ? [[m, qs]] : qs.map(q => [q, [q]]);
+      for (const [c, members] of groups) {
+        let rx = 0, ry = 0, mz = 0;
+        for (const q of members) {
+          const [x, y, z] = byNode.get(q), dx = (st.L.ij[q][0] - st.L.ij[c][0]) * GRID, dy = (st.L.ij[q][1] - st.L.ij[c][1]) * GRID;
+          rx += x; ry += y; mz += z + dx * y - dy * x;
+        }
+        list.push([c, rx, ry, mz]);
+        sideAt.set(c, OUT[sp.side]);
+      }
+    }
+    ctx.save(); ctx.strokeStyle = C.ok; ctx.fillStyle = C.ok; ctx.lineWidth = Math.max(2, s * 0.035);
+    ctx.font = `600 ${Math.max(10, s * 0.15)}px ${MONO}`; ctx.textBaseline = 'middle';
+    // Beschriftung im Bild halten
+    const text = (t, x, y, align) => {
+      const w = ctx.measureText(t).width, x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+      const sx = Math.min(Math.max(x0, 4), G.W - w - 4) - x0;
+      ctx.fillText(t, x + sx, Math.min(Math.max(y, 10), G.H - 10));
+    };
+    for (const [q, rx, ry, mz] of list) {
+      const R = Math.hypot(rx, ry), mom = Math.abs(mz) >= 1e4;   // Moment ab 0,01 kNm
+      if (R < 0.005 * max && !mom) continue;
+      const [x, y] = P(st.L.ij[q]);
+      let t = R >= 0.005 * max ? `${kNnum(R)} kN` : '';
+      if (R >= 0.005 * max) {
+        const ux = rx / R, uy = -ry / R, len = s * 0.75, n = sideAt.get(q) || [0, -1];
+        const into = rx * n[0] + ry * n[1] < 0;   // Kraft zeigt vom Lager ins Tragwerk
+        const [ax, ay] = into ? [x - ux * len, y - uy * len] : [x, y], [bx, by] = into ? [x, y] : [x + ux * len, y + uy * len];
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx - ux * hl, by - uy * hl); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, by);
+        ctx.lineTo(bx - ux * hl - uy * hw, by - uy * hl + ux * hw); ctx.lineTo(bx - ux * hl + uy * hw, by - uy * hl - ux * hw);
+        ctx.closePath(); ctx.fill();
+        const [ox, oy, d] = into ? [ax, ay, -1] : [bx, by, 1];   // äußeres Ende, dort die Beschriftung
+        const vx = ux * d, vy = uy * d;
+        ctx.textAlign = vx > 0.3 ? 'left' : vx < -0.3 ? 'right' : 'center';
+        if (mom) t += `, ${kNm(mz)}`;
+        text(t, ox + vx * 4, oy + vy * 4 + (Math.abs(vx) <= 0.3 ? (vy > 0 ? 9 : -9) : 0), ctx.textAlign);
+      } else { ctx.textAlign = 'left'; text(kNm(mz), x + 6, y + s * 0.3, 'left'); }
+    }
+    ctx.restore();
+  }
+  function legendHtml() {
+    const bands = lab => '<ol>' + BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : lab(b)}</span></li>`).join('') +
+      `<li><i style="background:${OVER}"></i><span>${lab(10)}</span></li></ol>`;
+    if (st.out === 'force') return '<span class="lg-t">Stabkraft in kN</span><ol>' +
+      [[ZUG, 'Zug +'], [DRUCK, 'Druck −'], [C.steel2, 'Nullstab']].map(([c, t]) => `<li><i style="background:${c}"></i><span>${t}</span></li>`).join('') +
+      '</ol><span>grüne Pfeile: Lagerkräfte</span>';
+    if (st.out === 'stress') return `<span class="lg-t">Spannung je Stab in MPa</span>${bands(b => fmt(FEM.RE * b / 10))}<span>über ${FEM.RE} MPa fließt der Stab</span>`;
+    if (st.out === 'buckle') return `<span class="lg-t">Druckkraft je Knicklast in %, Zahl: Knicklast in kN</span>${bands(b => fmt(10 * b))}` +
+      `<span>${st.buck ? 'über 100 % knickt der Stab' : 'Knicken ist ausgeschaltet, nur zur Info'}; Zugstäbe grau</span>`;
+    return `<span class="lg-t">Auslastung je Stab in %</span>${bands(b => fmt(10 * b))}<span>über 100 % ${st.buck ? 'fließt der Stab oder knickt' : 'fließt der Stab'}</span>`;
+  }
+  // Auswahl der Werte und Legende dazu
+  const outUi = () => {
+    for (const b of $('werte').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.o === st.out));
+    $('legend').innerHTML = legendHtml();
+  };
+
   // Knicken: Stab seitlich ausgebaucht; Fließen: Riss quer über die Stabmitte
   function drawBuckle(p, w) {
     const [a, b] = [p[0], p.at(-1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, amp = l * 0.12;
@@ -375,7 +499,7 @@
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
-  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k])[1];
+  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k], st.buck)[1];
 
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
@@ -518,14 +642,14 @@
     }
     $('femline').textContent = t;
   }
-  const legend = on => { $('legend').hidden = !on; };
+  const legend = on => { $('legend').hidden = !on; $('werte-row').hidden = !on; };   // Werte-Auswahl nur, wenn Farben zu sehen sind
 
   function panel() {
     if (st.phase === 'edit') return edPanel();
     const L = st.L, d = st.def, e = esoNow(), eso = st.phase === 'eso' && e;
     const on = eso ? e.on : st.on, conn = eso ? e.res.conn : st.conn;
     $('tb-name').textContent = partName(d);
-    $('tb-load').textContent = loadText(d);
+    $('tb-load').textContent = loadText(d) + (st.grav ? ' + Eigengewicht' : '');
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
     const b = barsOf(inSet(on, conn));
     $('tb-bars').textContent = `${b.count}: ${b.text}`;
@@ -557,7 +681,10 @@
     $('b-probe').textContent = `Probe-Rechnung (${st.probes})`;
     $('b-eso').textContent = st.phase === 'eso' ? 'Mein Ergebnis' : 'Lösung des Algorithmus';
     for (const p of [1, 2, 3]) { const b = $('pr-' + p); b.setAttribute('aria-pressed', String(st.prof === p)); b.disabled = !design || st.busy; }
-    for (const [id, on] of [['lv-def', st.liveDef], ['lv-util', st.liveUtil]]) { $(id).setAttribute('aria-pressed', String(on)); $(id).disabled = !design || st.busy; }
+    for (const [id, on] of [['lv-def', st.liveDef], ['lv-util', st.liveUtil], ['set-grav', st.grav], ['set-buck', st.buck]]) {
+      $(id).setAttribute('aria-pressed', String(on)); $(id).disabled = !design || st.busy;
+    }
+    $('set-row').hidden = edit;
     // im Entwurf: welches Modell gewertet wird; nach dem Abgeben: welches Modell gezeigt wird
     const m = design ? st.model : st.shown;
     $('model-label').textContent = design ? 'Rechnen als' : 'Ansicht';
@@ -607,7 +734,7 @@
     st.animId++;
     let def = i === RANDOM ? PARTS.generate(arg) : i === CUSTOM ? PARTS.fromCode(arg) : LEVELS[i];
     if (!def) { i = 0; def = LEVELS[0]; }
-    st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def);
+    st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def); applyOpts();
     st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false;
     st.drag = null; st.hover = null;
     $('stamp').hidden = true;
@@ -763,6 +890,13 @@
     st.phase = 'design';
     refresh();
   }
+  // Eigengewicht und Knicken: im Entwurf umschaltbar, gilt für die Wertung und den Gegner
+  function setOpt(which) {
+    if (!editable()) return;
+    if (which === 'grav') { st.grav = !st.grav; store.set('grav', st.grav); } else { st.buck = !st.buck; store.set('buck', st.buck); }
+    applyOpts(); st.phase = 'design';
+    outUi(); refresh(); startEso();
+  }
   function setProf(p) {
     if (!editable()) return;
     st.prof = p;
@@ -770,7 +904,7 @@
   }
 
   // ---------- Algorithmus ----------
-  const esoKey = () => st.key + '-' + st.model;
+  const esoKey = () => st.key + '-' + st.model + optsKey();
   const esoNow = () => st.eso[esoKey()];
   function showEso() {
     const e = esoNow(), m = st.shown;
@@ -1258,7 +1392,7 @@
 
   // Im Wettkampf gibt es keine Probe-Rechnungen: Verformung und Auslastung laufen die ganze Runde live (Wunsch Felix)
   const mp = { on: false, role: null, code: '', name: '', j: 0, rid: 0, sub: false, revealed: 0, own: null,
-    g: { rid: 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: 300, left: 0, m: 't' }, tick: null, deadline: 0, revealTimer: null,
+    g: { rid: 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: 300, left: 0, m: 't', w: 0, b: 1 }, tick: null, deadline: 0, revealTimer: null,
     snap: null, order: null, shown: 0, boardTimer: null, scores: {}, conflict: false, hp: false, zoom: null, zm: null, all: false, bset: null, bsc: null };
   let mpScr = '';
   // hp: die Spielleitung spielt selbst mit (Name in mp.name), zoom: Entwurf in der großen Ansicht nach der Auflösung, zm: Modell
@@ -1284,7 +1418,7 @@
     if (!LEVELS[g.lv] && !(g.lv === RANDOM && Number.isInteger(g.nr) && g.nr > 0 && g.nr < 1e5)
       && !(g.lv === CUSTOM && typeof g.bc === 'string' && g.bc.length <= MAX_BC)) return null;
     return { rid: g.rid, ph: g.ph, lv: g.lv, nr: g.lv === RANDOM ? g.nr : 0, bc: g.lv === CUSTOM ? g.bc : '', dur: Number(g.dur) || 300,
-      left: Math.max(0, Math.min(999, Math.round(Number(g.left) || 0))), m: g.m === 'f' ? 'f' : 't' };
+      left: Math.max(0, Math.min(999, Math.round(Number(g.left) || 0))), m: g.m === 'f' ? 'f' : 't', w: g.w === 1 ? 1 : 0, b: g.b === 0 ? 0 : 1 };
   }
   const hostG = () => { const h = hostPeer(); return h ? validG(h.presence.g) : null; };
   const validRes = res => (Array.isArray(res) ? res : [])
@@ -1311,6 +1445,8 @@
   // Runde vorbereiten: Bauteil und Rechenmodell der Spielleitung, Verformung und Auslastung live
   function roundSetup(g) {
     st.model = st.look = MODEL[g.m]; st.liveDef = true; st.liveUtil = true;
+    st.grav = g.w === 1; st.buck = g.b !== 0;   // Eigengewicht und Knicken wie von der Spielleitung eingestellt
+    outUi();
     loadLevel(g.lv, g.lv === CUSTOM ? g.bc : g.nr);
     st.probes = 0;
     panel();
@@ -1359,7 +1495,7 @@
 
   // ---------- Wettkampf: Spielleitung ----------
   const scoreList = () => Object.values(mp.scores).sort((a, b) => b.pts - a.pts).slice(0, 10).map(s => [s.name, s.pts]);
-  const saveHost = () => store.set('host', { code: mp.code, rid: mp.g.rid, lv: mp.g.lv, nr: mp.g.nr, bc: mp.g.bc, dur: mp.g.dur, m: mp.g.m,
+  const saveHost = () => store.set('host', { code: mp.code, rid: mp.g.rid, lv: mp.g.lv, nr: mp.g.nr, bc: mp.g.bc, dur: mp.g.dur, m: mp.g.m, w: mp.g.w, b: mp.g.b,
     hp: mp.hp, name: mp.name, scores: mp.scores, t: Date.now() });
   function savedHost() {
     const h = store.get('host');
@@ -1370,7 +1506,8 @@
     Object.assign(mp, { role: 'host', code: r ? normCode(r.code) : newCode(), j: Date.now(), snap: null, order: null, zoom: null,
       hp: !!(r && r.hp), name: r && typeof r.name === 'string' ? clean(r.name, 16) : mp.name,
       scores: r && r.scores && typeof r.scores === 'object' ? r.scores : {},
-      g: { rid: r ? r.rid | 0 : 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: r && DURS.includes(r.dur) ? r.dur : 300, left: 0, m: r && r.m === 'f' ? 'f' : 't' } });
+      g: { rid: r ? r.rid | 0 : 0, ph: 'lobby', lv: 0, nr: 0, bc: '', dur: r && DURS.includes(r.dur) ? r.dur : 300, left: 0, m: r && r.m === 'f' ? 'f' : 't',
+        w: r && r.w === 1 ? 1 : 0, b: r && r.b === 0 ? 0 : 1 } });
     if (r && (LEVELS[r.lv] || (r.lv === RANDOM && r.nr > 0) || (r.lv === CUSTOM && PARTS.fromCode(r.bc))))
       Object.assign(mp.g, { lv: r.lv, nr: r.lv === RANDOM ? r.nr : 0, bc: r.lv === CUSTOM ? r.bc : '' });
     roundSetup(mp.g);
@@ -1380,9 +1517,10 @@
   }
   function hostStart() {
     const lv = +$('mp-lv').value, dur = +$('mp-dur').value, m = $('mp-m').value === 'f' ? 'f' : 't';
+    const w = $('mp-w').checked ? 1 : 0, b = $('mp-b').checked ? 1 : 0;
     mp.hp = $('mp-hp').checked;
     if (mp.hp) { mp.name = clean($('mp-hn').value, 16) || 'Spielleitung'; store.set('name', mp.name); }
-    Object.assign(mp.g, { rid: mp.g.rid + 1, ph: 'design', lv, nr: lv === RANDOM ? newNr() : 0, bc: lv === CUSTOM ? store.get('bau') || '' : '', dur, left: dur, m });
+    Object.assign(mp.g, { rid: mp.g.rid + 1, ph: 'design', lv, nr: lv === RANDOM ? newNr() : 0, bc: lv === CUSTOM ? store.get('bau') || '' : '', dur, left: dur, m, w, b });
     Object.assign(mp, { deadline: performance.now() + dur * 1000, snap: null, order: null, zoom: null });
     stopBoard();
     if (mp.hp) Object.assign(mp, { rid: mp.g.rid, sub: false, own: null });
@@ -1611,7 +1749,7 @@
     return net.up ? 'Live verbunden' : 'Verbinde …';
   }
   const joinText = () => `Mitspielen: <span class="joinurl">${esc(location.origin + location.pathname + '#' + mp.code)}</span> öffnen, Namen eintragen, fertig.`;
-  const roundText = () => `${esc(partName(st.def))}, gerechnet als ${NAME[st.model]}`;
+  const roundText = () => `${esc(partName(st.def))}, gerechnet als ${NAME[st.model]}${optsText()}`;
 
   function mpScreen() {
     if (!mp.role) return 'start';
@@ -1680,6 +1818,8 @@
         <label class="field">Rechnen als<select id="mp-m"><option value="t">Fachwerk</option><option value="f">Rahmen</option></select></label>
         <label class="field">Zeit<select id="mp-dur">${DURS.map(s => `<option value="${s}">${mmss(s)} min</option>`).join('')}</select></label>
       </div>
+      <label class="live"><input type="checkbox" id="mp-w"> Mit Eigengewicht</label>
+      <label class="live"><input type="checkbox" id="mp-b"> Mit Knicken</label>
       <label class="live"><input type="checkbox" id="mp-hp"> Selbst mitspielen</label>
       <label class="field" id="mp-hn-row">Name in der Rangliste<input id="mp-hn" maxlength="16" autocomplete="nickname"></label>
       <p class="mp-note" id="mp-hp-note">Ihr Entwurf ist während der Runde auf dem Beamer zu sehen.</p>
@@ -1766,6 +1906,7 @@
         $('mp-lv').value = String(mp.g.rid && mp.g.lv < RANDOM ? mp.g.lv + 1 : mp.g.lv);   // nach einer Runde das nächste, nach den festen Zufall
         $('mp-dur').value = String(mp.g.dur);
         $('mp-m').value = mp.g.m;
+        $('mp-w').checked = mp.g.w === 1; $('mp-b').checked = mp.g.b !== 0;
         const n = store.get('name'), syncHp = () => { $('mp-hn-row').hidden = $('mp-hp-note').hidden = !$('mp-hp').checked; };
         $('mp-hp').checked = mp.hp;
         $('mp-hn').value = mp.name || (typeof n === 'string' ? n : '');
@@ -1888,6 +2029,8 @@
     $('drawing').hidden = false; $('mp-board').hidden = true; $('timer').hidden = true; $('profiles').hidden = false; $('howto').hidden = false;
     // Einstellungen für allein wiederherstellen
     st.model = store.get('model') === 'frame' ? 'frame' : 'truss';
+    st.grav = store.get('grav') === true; st.buck = store.get('buck') !== false;
+    outUi();
     st.liveDef = store.get('live-def') !== false; st.liveUtil = store.get('live-util') === true;
     if (st.li === CUSTOM && !st.def.code) openEditor(); else loadLevel(st.li, st.def.nr || st.def.code);   // im Baukasten dort weiter
   }
@@ -2023,6 +2166,14 @@
   for (const p of [1, 2, 3]) $('pr-' + p).onclick = () => setProf(p);
   $('lv-def').onclick = () => toggleLive('def');
   $('lv-util').onclick = () => toggleLive('util');
+  $('set-grav').onclick = () => setOpt('grav');
+  $('set-buck').onclick = () => setOpt('buck');
+  $('werte').onclick = e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    st.out = b.dataset.o; store.set('werte', st.out);
+    outUi(); render();
+  };
   $('g-truss').onclick = () => setModel('truss');
   $('g-frame').onclick = () => setModel('frame');
   $('b-submit').onclick = submit;
@@ -2053,9 +2204,7 @@
     $('pr-' + p).title = `Taste ${p}: Quadratrohr ${q.name}, ${fmt(q.kgmm * 1000, 1)} kg/m`;
   }
 
-  $('legend').innerHTML = '<span class="lg-t">Auslastung je Stab in %</span><ol>' +
-    BANDS.map((c, b) => `<li><i style="background:${c}"></i><span>${b % 2 ? '' : fmt(10 * b)}</span></li>`).join('') +
-    `<li><i style="background:${OVER}"></i><span>100</span></li></ol><span>über 100 % fließt der Stab oder knickt</span>`;
+  outUi();
 
   const repaint = () => { readColors(); render(); };
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', repaint);

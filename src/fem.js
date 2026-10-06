@@ -10,12 +10,15 @@ const FEM = (() => {
     .map(([b, t, A, I, W]) => ({ name: `${b} × ${b} × ${t}`, b, t, A, I, W, kgmm: A * 7.85e-6 }));
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
-  // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken.
-  // Ergebnis [Auslastung, knickt]
-  function barUtil(p, N, M, Lk) {
-    const uy = (Math.abs(N) / p.A + M / p.W) / RE, uk = N < 0 ? -N / ncr(p, Lk) : 0;
+  // Auslastung eines Stabs mit Profil p: Fließen (Normal- plus Biegespannung, M = größtes Endmoment) oder Knicken
+  // (buckling: Knicken berücksichtigen, Einstellung im Spiel). Ergebnis [Auslastung, knickt]
+  function barUtil(p, N, M, Lk, buckling = true) {
+    const uy = (Math.abs(N) / p.A + M / p.W) / RE, uk = buckling && N < 0 ? -N / ncr(p, Lk) : 0;
     return [Math.max(uy, uk), uk > uy];
   }
+  const G_ACC = 9.81;   // Erdbeschleunigung in m/s², fürs Eigengewicht
+  // Einstellungen des Spiels je Bauteil (L.opts): gravity Eigengewicht der Stäbe, buckling Knicken (Stab und Ganzes)
+  const optsOf = L => ({ gravity: !!(L.opts && L.opts.gravity), buckling: !(L.opts && L.opts.buckling === false) });
   // Federn an jedem Freiheitsgrad, so weich, dass ein tragfähiges Stabwerk sie nicht merkt. Sie halten die Matrix regulär;
   // nehmen sie einen nennenswerten Teil der Arbeit der Last auf, ist das Stabwerk beweglich (Mechanismus).
   const KS_T = 1e-11 * E * PROFILES[0].A / GRID, KS_R = 1e-11 * E * PROFILES[0].I / GRID, MECH = 0.01;
@@ -56,7 +59,8 @@ const FEM = (() => {
     bars.forEach((b, k) => { nodeBars[b.a].push(k); nodeBars[b.b].push(k); });
     const domain = new Uint8Array(nB).fill(1);
     const total = bars.reduce((a, b) => a + b.len, 0);
-    return { def, nx, ny, nN, ij, id, bars, nB, barAt, frozen, fix, fx, fy, supportNodes, loadNodes, nodeBars, domain, total };
+    return { def, nx, ny, nN, ij, id, bars, nB, barAt, frozen, fix, fx, fy, supportNodes, loadNodes, nodeBars, domain, total,
+      opts: { gravity: false, buckling: true } };
   }
 
   // Stäbe, die über Knoten mit den Startknoten verbunden sind (nur Stäbe aus set)
@@ -212,7 +216,9 @@ const FEM = (() => {
     const conn = attached(L, on);
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
       util: new Float64Array(L.nB), N: new Float64Array(L.nB), M: new Float64Array(L.nB * 2), Lk: new Float64Array(L.nB),
-      fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1, disp: null, lambda: NaN, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0 };
+      fail: new Uint8Array(L.nB), maxUtil: 0, maxBar: -1, disp: null, lambda: NaN, mass: mass(L, on, conn), dofs: 0, bars: 0, ms: 0,
+      sigma: new Float64Array(L.nB), ncr: new Float64Array(L.nB), react: [] };   // Spannung in MPa, Knicklast in N, Lagerkräfte
+    const { gravity, buckling } = optsOf(L);
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
     if (!L.loadNodes.every(n => hit.has(n))) { res.reason = 'lastpfad'; return res; }
@@ -343,6 +349,13 @@ const FEM = (() => {
       if (eq[q * 3] >= 0) x[eq[q * 3]] += L.fx[q];
       if (eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += L.fy[q];
     }
+    // Eigengewicht (Einstellung): je tragendem Stab Masse mal g, je zur Hälfte an seine beiden Knoten
+    const gy = new Float64Array(gravity ? L.nN : 0);
+    if (gravity) for (const el of els) {
+      const w = el.b.len * el.p.kgmm * G_ACC / 2;
+      gy[el.b.a] -= w; gy[el.b.b] -= w;
+    }
+    for (let q = 0; q < gy.length; q++) if (gy[q] && eq[q * 3 + 1] >= 0) x[eq[q * 3 + 1]] += gy[q];
     const f = Float64Array.from(x);
     solve(A, x);
     // Mechanismus, den die Last anregt: die weichen Federn nehmen einen nennenswerten Teil der Arbeit auf.
@@ -361,6 +374,7 @@ const FEM = (() => {
 
     // 2. Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler, Stabzug)
     let nY = 0, nK = 0;
+    const react = new Map();
     for (const el of els) {
       const { k, b, p } = el, u = el.dof.map((q, i) => disp[(i < nd ? b.a : b.b) * 3 + (i % nd)]);
       let N, M1 = 0, M2 = 0;
@@ -372,13 +386,24 @@ const FEM = (() => {
         M1 = dv + EI / Lb * (4 * ul[2] + 2 * ul[5]);
         M2 = dv + EI / Lb * (2 * ul[2] + 4 * ul[5]);
       }
-      const Lk = bucklingLength(L, fe, k, pass), [util, knickt] = barUtil(p, N, Math.max(Math.abs(M1), Math.abs(M2)), Lk);
+      const Mx = Math.max(Math.abs(M1), Math.abs(M2)), Lk = bucklingLength(L, fe, k, pass), [util, knickt] = barUtil(p, N, Mx, Lk, buckling);
       el.N = N;
       res.N[k] = N; res.M[2 * k] = M1; res.M[2 * k + 1] = M2; res.Lk[k] = Lk; res.util[k] = util;
+      res.sigma[k] = Math.abs(N) / p.A + Mx / p.W; res.ncr[k] = ncr(p, Lk);
+      // Lagerkräfte: was der Stab an seinen Enden auf die Knoten ausübt, an den Lagern aufsummiert (unten minus Knotenlasten)
+      if (!quick) for (const [end, q] of [[0, b.a], [1, b.b]]) if (L.fix[q]) {
+        const m = el.dof.length, F = [0, 0, 0];
+        for (let i = 0; i < nd; i++) { const row = end * nd + i; for (let c = 0; c < m; c++) F[i] += el.K[row * m + c] * u[c]; }
+        let r = react.get(q);
+        if (!r) react.set(q, r = [0, 0, 0]);
+        r[0] += F[0]; r[1] += F[1]; r[2] += F[2];
+      }
       if (util > 1) { res.fail[k] = knickt ? 2 : 1; if (knickt) nK++; else nY++; }
       if (util > res.maxUtil) { res.maxUtil = util; res.maxBar = k; }
     }
     res.nYield = nY; res.nBuckle = nK;
+    // Lagerkraft R = Summe der Stabendkräfte minus äußere Last am Knoten (Last, Eigengewicht); [Knoten, Rx, Ry, Moment]
+    for (const [q, r] of react) res.react.push([q, r[0] - L.fx[q], r[1] - L.fy[q] - (gravity ? gy[q] : 0), frame ? r[2] : 0]);
 
     // 3. Kinematik, unabhängig von der Last: Gibt es eine Bewegung, die keinen Stab dehnt (und keinen Rahmenstab biegt)?
     // Im Fachwerk sind die Durchlaufstellen dabei quer gehalten. Im Rahmen ist das die Matrix aus Schritt 1.
@@ -396,8 +421,8 @@ const FEM = (() => {
     // Lastfaktor λ aus (K + K_G,Zug) φ = λ (-K_G,Druck) φ.
     const fails = res.maxUtil > 1, compressed = els.some(el => el.N < 0);
     let unstable = false;
-    if (!fails && compressed) { build(A, el => el.N, !frame); unstable = !(factor(A, TOL) >= TOL); }
-    if (!quick && compressed) {
+    if (!fails && compressed && buckling) { build(A, el => el.N, !frame); unstable = !(factor(A, TOL) >= TOL); }
+    if (!quick && compressed && buckling) {
       const B = band2;
       build(B, el => el.N > 0 ? el.N : null, !frame);
       factor(B, 0);
@@ -416,7 +441,7 @@ const FEM = (() => {
       const { x: phi, lam } = inverse(B, Bmul, 30);
       res.lambda = lam;
       if (unstable) res.disp = scaled(toDisp(phi, true));
-    } else if (!compressed) res.lambda = Infinity;
+    } else if (!compressed && buckling) res.lambda = Infinity;
     if (unstable) return done('stabil');
 
     res.disp = quick || frame ? disp : (straighten(L, fe, pass, disp), disp);
@@ -491,7 +516,7 @@ const FEM = (() => {
         if (!r.fe[k]) need = L.frozen[k] ? 1 : 0;
         else {
           const M = Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1]));
-          need = PROFILES.findIndex(p => barUtil(p, r.N[k], M, r.Lk[k])[0] <= 1) + 1 || PROFILES.length;
+          need = PROFILES.findIndex(p => barUtil(p, r.N[k], M, r.Lk[k], optsOf(L).buckling)[0] <= 1) + 1 || PROFILES.length;
           if (it >= 8) need = Math.max(need, cur[k]);
         }
         if (need !== cur[k]) { cur[k] = need; changed = true; }

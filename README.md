@@ -17,6 +17,8 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - Drei Profile (Tasten 1 bis 3). Gesperrte Stäbe (Fahrbahn, Stützen und Riegel des Tors) bleiben, ihr Profil ist wählbar.
 - „Volles Raster“ als Vorlage, „Alles leeren“ zurück zum Start.
 - Live beim Zeichnen, einzeln oder zusammen: Verformung (fester Maßstab je Bauteil: das volle Raster im mittleren Profil verschiebt sich um 0,3 % der größten Abmessung, ein weicher Entwurf entsprechend mehr, sanft begrenzt auf 5 %) und Auslastung (Übungsmodus). Dazu eine Probe-Rechnung mit Auslastung.
+- **Werte** unter der Zeichnung, sobald Farben zu sehen sind (Übungsmodus, Probe-Rechnung, Ergebnis, Wettkampf): Auslastung, Kräfte (Stabkraft N in kN, Zug blau mit +, Druck rot mit −, Nullstäbe grau; Lagerkräfte als grüne Pfeile, eine Einspannung über mehrere Knoten als Resultierende mit Einspannmoment), Spannungen ($`|N|/A + |M|_\text{max}/W`$ in MPa) und Knicklasten ($`\pi^2 E I / L_k^2`$ in kN je Druckstab, Farbe: Druckkraft je Knicklast). Zahlen je Stab (ein gerader Stabzug ist ein Stab); wo sie sich überdecken würden, fallen die kleineren weg.
+- **Einstellungen** „Mit Eigengewicht“ (je tragendem Stab Masse mal $`g = 9{,}81\ \text{m/s}^2`$, je zur Hälfte an seine Knoten) und „Mit Knicken“ (ausgeschaltet nur Fließen, ohne Knicken der Stäbe und ohne Stabilität des Ganzen; Knicklasten weiter zur Info). Allein im Entwurf umschaltbar, im Wettkampf je Runde von der Spielleitung; der Gegner rechnet mit denselben Einstellungen.
 
 ## Zufall und Baukasten
 
@@ -31,6 +33,7 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - Die Spielleitung eröffnet einen Raum mit vierstelligem Code (Link mit `#CODE`), wählt Bauteil (fest, Zufallsbauteil oder das zuletzt im Baukasten gespielte), Rechenmodell (Fachwerk oder Rahmen) und Zeit (3 bis 10 Minuten) und kann selbst mitspielen. Nach den festen Bauteilen schlägt sie Zufall vor.
 - Keine Probe-Rechnungen: Verformung und Auslastung sind die ganze Runde live zu sehen. Der Beamer zeigt dabei je Person die Masse des aktuellen Entwurfs, grün, wenn er gerade hält.
 - Auflösung: Entwürfe nacheinander aufdecken, der leichteste zuletzt; große Ansicht je Entwurf, umschaltbar zwischen Fachwerk und Rahmen; der Algorithmus als Geisterzeile.
+- Eigengewicht und Knicken stellt die Spielleitung je Runde ein (Standard: ohne Eigengewicht, mit Knicken); die Rundenüberschrift nennt die Einstellungen.
 - Punkte nach Platz je Runde: Von n Entwürfen, die halten, bekommt der leichteste n Punkte, der schwerste 1; wer versagt, 0. Die Gesamtwertung zählt über alle Runden.
 - Server: `npm start` (Port aus `PORT`, Standard 8080). Docker-Deploy: `KNOTENPUNKT_HOST=<ssh-name> scripts/deploy.sh` baut das Image auf dem Server und startet den Container `knotenpunkt` auf 127.0.0.1:8909; bricht ab, wenn gerade eine Runde läuft. nginx bindet ihn über `deploy/nginx-knotenpunkt-location.conf` unter `/knotenpunkt/` ein.
 
@@ -119,6 +122,8 @@ $`f > 0`$ heißt verschieblich, $`f = 0`$ statisch bestimmt, $`f < 0`$ so oft st
 - Zweistab: Stabkräfte aus dem Knotengleichgewicht, Auslastung aus Fließen und Knicken; Zugstab nur Fließen
 - Feld ohne Diagonale: als Fachwerk beweglich, als Rahmen tragfähig, Kopfverschiebung zwischen eingespanntem und gelenkigem Riegel
 - Abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab, im Rahmen wie im Fachwerk
+- Ausgabe: Lagerkräfte des Zweistabs im Gleichgewicht (je Lager $`F/2`$ senkrecht und waagrecht, Fachwerk und Rahmen), Spannung $`|N|/A`$, Knicklast nach Euler; mit Eigengewicht tragen die Lager zusätzlich Masse mal $`g`$
+- Knicken ausgeschaltet: ein Druckstab, der sonst knickt (40 kN bei 21,5 kN Knicklast), hält, solange er nicht fließt; Knicklast weiter zur Info
 - Sprosse zwischen zwei Druckketten ohne Diagonale: im Fachwerk beweglich
 - Kragstütze mit freiem Kopf: im Rahmen instabil ab der Knicklast nach Euler-Fall 1 (kritischer Lastfaktor auf 2 % genau), im Fachwerk beweglich
 - Bewegungsform im Fachwerk: Stützen des leeren Tors bleiben gerade und drehen sich um das Fußgelenk; Querlast an einer Durchlaufstelle knickt den Zug dort

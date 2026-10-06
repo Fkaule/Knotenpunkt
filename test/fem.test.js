@@ -251,3 +251,39 @@ test("Abzählkriterium: abgezählt verschieblich heißt im Spiel immer beweglich
   }
   assert.ok(ausnahme > 0, "Ausnahmefälle kommen vor und werden erkannt");
 });
+
+test("Ausgabe: Lagerkräfte im Gleichgewicht, Spannung und Knicklast je Stab; Eigengewicht als Last", () => {
+  const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0], [2, 0]], side: "bottom", fix: 3 }],
+    loads: [{ node: [1, 1], fx: 0, fy: -F }] });
+  const on = only(L, [[0, 0, 1, 1], [2, 0, 1, 1]]);
+  for (const model of ["truss", "frame"]) {
+    const r = FEM.analyze(L, on, model), R = new Map(r.react.map(([q, x, y]) => [q, [x, y]]));
+    near(R.get(L.id(0, 0))[0], F / 2, model === "truss" ? 1e-6 : 1e-2, `${model}: Ax`);
+    near(R.get(L.id(0, 0))[1], F / 2, 1e-6, `${model}: Ay`);
+    near(-R.get(L.id(2, 0))[0], F / 2, model === "truss" ? 1e-6 : 1e-2, `${model}: Bx`);
+    near(R.get(L.id(2, 0))[1], F / 2, 1e-6, `${model}: By`);
+  }
+  const r = FEM.analyze(L, on, "truss"), k = L.barAt(0, 0, 1, 1);
+  near(r.sigma[k], F / Math.SQRT2 / P1.A, 1e-6, "Spannung |N| / A");
+  near(r.ncr[k], Math.PI ** 2 * FEM.E * P1.I / (2 * FEM.GRID ** 2), 1e-9, "Knicklast nach Euler");
+  // mit Eigengewicht tragen die Lager zusätzlich die Masse beider Stäbe mal g
+  L.opts = { gravity: true, buckling: true };
+  const g = FEM.analyze(L, on, "truss");
+  near(g.react.reduce((a, [, , y]) => a + y, 0), F + FEM.mass(L, on) * 9.81, 1e-9, "Lager tragen Last und Eigengewicht");
+});
+
+test("Knicken ausgeschaltet: ein Druckstab, der knickt, hält, solange er nicht fließt", () => {
+  // gerader Stabzug über drei Felder, links Festlager, rechts Loslager (hält quer), Druck 40 kN längs: Knicklast 21,5 kN
+  const L = FEM.level({ nx: 3, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 },
+    { kind: "los", nodes: [[3, 0]], side: "bottom", fix: 2 }], loads: [{ node: [3, 0], fx: -40000, fy: 0 }] });
+  const on = only(L, [[0, 0, 1, 0], [1, 0, 2, 0], [2, 0, 3, 0]]);
+  for (const model of ["truss", "frame"]) {
+    L.opts = { gravity: false, buckling: true };
+    assert.strictEqual(FEM.analyze(L, on, model).reason, "knicken", `${model} mit Knicken`);
+    L.opts = { gravity: false, buckling: false };
+    const r = FEM.analyze(L, on, model);
+    assert.ok(r.ok, `${model} ohne Knicken: ${r.reason}`);
+    near(r.ncr[L.barAt(1, 0, 2, 0)], Math.PI ** 2 * FEM.E * P1.I / (3 * FEM.GRID) ** 2, 1e-9, "Knicklast weiter zur Info");
+  }
+});
+
