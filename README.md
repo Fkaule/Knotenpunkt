@@ -97,7 +97,7 @@ per inverser Iteration; die Knickform wird gezeigt.
 
 mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer zum Stab hält (Euler-Fall 2); ob dieser Knoten wirklich hält, prüft die Stabilität des Ganzen. Hält, wenn $`\eta \le 1`$ in allen Stäben.
 
-**Durchlaufende Stäbe:** Wo ein Stab ohne Querstab gerade weiterläuft und kein Lager quer hält, ist kein Knoten: Der Stabzug ist ein durchlaufendes Profil, wie ein Gurt, auch im Fachwerk. Gerechnet wird er weiter aus 1-m-Elementen; da dort keine Querkraft angreift, tragen sie nur Normalkraft, und geknickt wird über die ganze Länge. In der Zeichnung steht dort kein Gelenk, und im Fachwerk wird die Querverschiebung dieser Stellen fürs Zeichnen linear zwischen den Enden des Stabzugs eingesetzt. Greift dort eine Last quer an, ist das Fachwerk beweglich.
+**Durchlaufende Stäbe:** Wo ein Stab ohne Querstab gerade weiterläuft und kein Lager quer hält, ist kein Knoten: Der Stabzug ist ein durchlaufendes Profil, wie ein Gurt, auch im Fachwerk. Gerechnet wird er weiter aus 1-m-Elementen; da dort keine Querkraft angreift, tragen sie nur Normalkraft, und geknickt wird über die ganze Länge. In der Zeichnung steht dort kein Gelenk, und im Fachwerk wird die Querverschiebung dieser Stellen fürs Zeichnen linear zwischen den Enden des Stabzugs eingesetzt, auch in der Bewegungsform: Die Stütze des leeren Tors dreht sich als Ganzes um ihr Fußgelenk. Greift dort eine Last quer an, ist das Fachwerk beweglich; dieser Stabzug bleibt in der Bewegungsform geknickt, weil er genau dort nachgibt.
 
 **Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Teile, die nur über einen einzigen Knoten am Rest hängen und weder Lager noch Last enthalten, tragen nichts (am einzigen Anschluss kann keine Kraft wirken), dazu zählen lose Enden; ebenso Teile ohne Verbindung zu einer Last. Sie werden nicht gerechnet, zählen aber bei der Masse.
 
@@ -114,6 +114,7 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 - Loses Dreieck am Mittelknoten eines Druckstabs hält nichts, der Stab knickt über die ganze Länge
 - Sprosse zwischen zwei Druckketten ohne Diagonale: im Fachwerk beweglich
 - Kragstütze mit freiem Kopf: im Rahmen instabil ab der Knicklast nach Euler-Fall 1 (kritischer Lastfaktor auf 2 % genau), im Fachwerk beweglich
+- Bewegungsform im Fachwerk: Stützen des leeren Tors bleiben gerade und drehen sich um das Fußgelenk; Querlast an einer Durchlaufstelle knickt den Zug dort
 - Zweigelenkrahmen unter Vertikallast: Seitwärtsknicken, obwohl jeder Stab für sich hält
 - Last direkt auf dem Lager ist kein Mechanismus; eine Lagerung, die die Last zufällig nicht anregt, ist trotzdem beweglich
 - Profile: Auslastung und Masse je Profil; Bemessen wählt das kleinste Profil, das hält

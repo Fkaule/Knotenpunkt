@@ -462,8 +462,9 @@ const FEM = (() => {
   }
 
   // Fachwerk: An Durchlaufstellen hat die Querrichtung nur die Hilfsfeder. Fürs Zeichnen dort die Querverschiebung linear
-  // zwischen den Enden des Stabzugs einsetzen, der Stabzug ist ein durchlaufendes Profil.
-  function straighten(L, fe, pass, disp) {
+  // zwischen den Enden des Stabzugs einsetzen, der Stabzug ist ein durchlaufendes Profil. keep: Stabzüge mit einer solchen
+  // Durchlaufstelle bleiben, wie sie sind (dort greift eine Last quer an, der Zug gibt an dieser Stelle wirklich nach).
+  function straighten(L, fe, pass, disp, keep = null) {
     const done = new Uint8Array(L.nN);
     for (const [q0, [tx, ty]] of pass) {
       if (done[q0]) continue;
@@ -481,6 +482,7 @@ const FEM = (() => {
       // left: vom Knoten q0 über k1 weg (umgedreht: Ende zuerst), right: über k2 weg
       const chain = [...left.map(([n]) => n), q0, ...right.map(([n]) => n)];
       const lens = [...left.map(([, l]) => l), L.bars[k1].len, ...right.map(([, l]) => l)];
+      if (keep && chain.some(n => pass.has(n) && keep[n])) { chain.forEach(n => { done[n] = 1; }); continue; }
       let s = 0;
       const pos = chain.map((_, i) => (i ? (s += lens[i - 1]) : 0));
       const total = pos[pos.length - 1], a = chain[0], b = chain[chain.length - 1];
@@ -584,10 +586,10 @@ const FEM = (() => {
       }
     }
     // Verschiebungen je Knoten (u, v in mm, Verdrehung in rad) aus einem Lösungsvektor; im Fachwerk Stabzüge gerade
-    const toDisp = (x, straight) => {
+    const toDisp = (x, straight, keep) => {
       const d = new Float64Array(L.nN * 3);
       for (let q = 0; q < L.nN; q++) for (let e = 0; e < nd; e++) { const p = eq[q * 3 + e]; if (p >= 0) d[q * 3 + e] = x[p]; }
-      if (straight && !frame) straighten(L, fe, pass, d);
+      if (straight && !frame) straighten(L, fe, pass, d, keep);
       return d;
     };
     // kleinste Eigenform von A φ = λ B φ per inverser Iteration (A zerlegt; ohne B: B = Einheitsmatrix)
@@ -629,7 +631,14 @@ const FEM = (() => {
     // Lasten, die nur auf Lagern sitzen, leisten keine Arbeit; dann entscheidet allein die Kinematikprüfung.
     let work = 0, spring = 0, fsum = 0;
     for (let p = 0; p < n; p++) { work += f[p] * x[p]; spring += ks[p] * x[p] * x[p]; fsum += Math.abs(f[p]); }
-    if (fsum > 0 && (!(work > 0) || spring > MECH * work)) { res.disp = toDisp(x, false); return done('mechanismus'); }
+    // Bewegungsform zeigen: Stabzüge über Durchlaufstellen gerade (die Stütze des Tors dreht sich als Ganzes um ihr Fußgelenk),
+    // außer dort, wo die Last selbst an einer Durchlaufstelle quer angreift
+    if (fsum > 0 && (!(work > 0) || spring > MECH * work)) {
+      const loaded = new Uint8Array(L.nN);
+      for (const q of L.loadNodes) loaded[q] = 1;
+      res.disp = toDisp(x, true, loaded);
+      return done('mechanismus');
+    }
     const disp = toDisp(x, false);
 
     // 2. Schnittgrößen und Auslastung je Stab: Fließen (Normal- plus Biegespannung) oder Knicken (Euler, Stabzug)

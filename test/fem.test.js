@@ -188,3 +188,17 @@ test("Algorithmus entfernt Stäbe, bemisst die Profile und das Ergebnis hält", 
     assert.ok(FEM.mass(L, e.on) < FEM.mass(L, Uint8Array.from(L.domain, () => 2)) / 2, `${model}: deutlich leichter als das volle Raster`);
   }
 });
+
+test("Bewegungsform im Fachwerk: Stütze des leeren Tors dreht sich gerade um das Fußgelenk, Querlast an einer Durchlaufstelle knickt den Zug", () => {
+  const LEVELS = require("../src/levels.js");
+  const L = FEM.level(LEVELS[0]), r = FEM.analyze(L, Uint8Array.from(L.frozen), "truss");
+  assert.strictEqual(r.reason, "mechanismus");
+  const u = (i, j) => r.disp[L.id(i, j) * 3];
+  for (const x of [0, 3]) for (const j of [1, 2]) near(u(x, j), u(x, 3) * j / 3, 1e-6, `Stütze x = ${x}, Knoten ${j}`);
+  // zwei Stäbe in einer Linie, dazwischen die Last quer: dort gibt der Zug nach, das bleibt sichtbar
+  const K = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0], [2, 0]], side: "bottom", fix: 3 }],
+    loads: [{ node: [1, 0], fx: 0, fy: -F }] });
+  const k = FEM.analyze(K, only(K, [[0, 0, 1, 0], [1, 0, 2, 0]]), "truss");
+  assert.strictEqual(k.reason, "mechanismus");
+  assert.ok(k.disp[K.id(1, 0) * 3 + 1] < 0, "Lastknoten bewegt sich nach unten");
+});
