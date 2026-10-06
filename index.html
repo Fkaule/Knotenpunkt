@@ -1652,6 +1652,10 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${pct(r.maxUtil)} %, hält.` : failWhy(r);
+  // Hinweis beim Zeichnen: Ein verschiebliches Stabwerk lässt sich nicht rechnen, es gibt weder Kräfte noch Auslastung
+  const moveText = r => (r.model === 'truss'
+    ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten oder ein Lager fehlt.'
+    : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') + ' Deshalb lässt es sich noch nicht rechnen; die Zeichnung zeigt die Bewegung.';
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
   function showFem(r, scale, live) {
     let t = '';
@@ -1724,7 +1728,8 @@ if (typeof module !== 'undefined') module.exports = PARTS;
         st.view = { mode: 'result', res: r, on: st.on, scale, live: true, colors };
         showFem(r, scale, !colors);
         legend(colors && r.disp && !modeShape(r));
-        const what = colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
+        const what = r.reason === 'mechanismus' ? `<b>Noch verschieblich.</b> ${moveText(r)}`
+          : colors ? `Live als ${NAME[st.model]}: ${statusText(r)}` : r.reason === 'lastpfad' ? failWhy(r) : st.def.note;
         $('verdict').innerHTML = `<p>${what}</p>${hint}`;
         if (plays() && !mp.sub) pres({ kg: Math.round(kg(st.on, r.conn) * 10), ok: r.ok ? 1 : 0 });   // Stand für den Beamer
       } else {
@@ -2919,7 +2924,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
     if (scr === 'p-design' || scr === 'h-play') {
       const r = st.view.res;
-      set('mp-live', r ? esc(`Live: ${statusText(r)} Masse ${fmt(kg(st.on, r.conn))} kg.`) : '');
+      set('mp-live', r ? esc(`Live: ${r.reason === 'mechanismus' ? 'Noch verschieblich. ' + moveText(r) : statusText(r)} Masse ${fmt(kg(st.on, r.conn))} kg.`) : '');
     }
     if (scr === 'h-play') set('mp-chips', chips(true));
     if (scr === 'p-result') {
