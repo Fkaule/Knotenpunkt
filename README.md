@@ -99,7 +99,15 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 
 **Durchlaufende Stäbe:** Wo ein Stab ohne Querstab gerade weiterläuft und kein Lager quer hält, ist kein Knoten: Der Stabzug ist ein durchlaufendes Profil, wie ein Gurt, auch im Fachwerk. Gerechnet wird er weiter aus 1-m-Elementen; da dort keine Querkraft angreift, tragen sie nur Normalkraft, und geknickt wird über die ganze Länge. Gezählt wird er als ein Stab (im Schriftfeld, bei der Lösung des Algorithmus, auf den Karten im Wettkampf und bei „N Stäbe fließen“); die FE-Zeile nennt dazu die Zahl der Elemente. In der Zeichnung steht dort kein Gelenk, und im Fachwerk wird die Querverschiebung dieser Stellen fürs Zeichnen linear zwischen den Enden des Stabzugs eingesetzt, auch in der Bewegungsform: Die Stütze des leeren Tors dreht sich als Ganzes um ihr Fußgelenk. Greift dort eine Last quer an, ist das Fachwerk beweglich; dieser Stabzug bleibt in der Bewegungsform geknickt, weil er genau dort nachgibt.
 
-**Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Teile, die nur über einen einzigen Knoten am Rest hängen und weder Lager noch Last enthalten, tragen nichts (am einzigen Anschluss kann keine Kraft wirken), dazu zählen lose Enden; ebenso Teile ohne Verbindung zu einer Last. Sie werden nicht gerechnet, zählen aber bei der Masse.
+**Lose Teile:** Stäbe ohne Verbindung zum Lager fallen ab. Teile, die nur über einen einzigen Knoten am Rest hängen und weder Lager noch Last enthalten, tragen nichts (am einzigen Anschluss kann keine Kraft wirken), dazu zählen lose Enden; ebenso Teile ohne Verbindung zu einer Last. Sie werden nicht gerechnet, zählen aber bei der Masse. Streng nach Technischer Mechanik gehören sie trotzdem zum Tragwerk: Im Fachwerk dreht sich ein solcher Teil um seinen Knoten, das Ganze ist dann verschieblich (geprüft wird die Kinematik deshalb mit allen Stäben, die am Lager hängen). Im Rahmen sind sie steif angeschlossen und stören nicht. Der Gegner lässt solche Teile beim Bemessen weg.
+
+**Abzählkriterium:** Im Schriftfeld steht, was das Abzählen an der Zeichnung ergibt: $`k`$ Knoten (Durchlaufstellen zählen nicht), $`s`$ Stäbe (ein gerader Stabzug ist ein Stab), $`r`$ Lagerreaktionen (Festlager 2, Loslager 1, Einspannung je Knoten 2 im Fachwerk und 3 im Rahmen):
+
+```math
+f_\text{Fachwerk} = 2k - s - r, \qquad f_\text{Rahmen} = 3k - 3s - r
+```
+
+$`f > 0`$ heißt verschieblich, $`f = 0`$ statisch bestimmt, $`f < 0`$ so oft statisch unbestimmt. Das Kriterium ist notwendig, nicht hinreichend: Ist das Tragwerk trotz $`f \le 0`$ verschieblich (Ausnahmefall), findet das die Kinematikprüfung; der Hinweis beim Zeichnen sagt das dann dazu. Beispiel: das Tor als Fachwerk mit einem Untergurt zwischen den beiden Festlagern hat $`2 \cdot 4 - 4 - 4 = 0`$ und schwankt trotzdem. Ein Test prüft an Zufallsentwürfen aller festen Bauteile in beiden Modellen, dass $`f > 0`$ im Spiel immer „beweglich“ ergibt (vorab an 5954 Entwürfen geprüft, auch an Zufallsbauteilen, ohne Abweichung).
 
 **Gegner:** beginnt mit dem vollen Raster im mittleren Profil und bemisst es (fully stressed design: jeder tragende Stab bekommt das kleinste Profil, das mit seinen Schnittgrößen hält; wiederholt, bis sich nichts mehr ändert, weil sich die Kräfte mit den Steifigkeiten umlagern; ist das Ganze instabil, werden die Druckstäbe vergrößert). Dann entfernt er immer den am geringsten ausgelasteten Stab, bemisst neu und behält das Ergebnis, wenn es hält und leichter ist. Was beim Entfernen beweglich wird oder nicht mehr hält, versucht er nicht noch einmal. Weil der Weg vom Start abhängt, rechnet er vier Läufe (eigenes Modell, anderes Modell mit Neubemessung, zwei mit zufällig gestörter Reihenfolge), nimmt den leichtesten und versucht zum Schluss je Stab ein Profil kleiner.
 
@@ -110,12 +118,13 @@ mit $`M = 0`$ im Fachwerk und dem Knickterm nur bei Druck. Knicklänge $`L_k`$: 
 - Kragbalken aus vier Rahmenstäben: Durchbiegung $`FL^3/(3EI)`$ und Einspannmoment $`FL`$; als Fachwerk beweglich
 - Zweistab: Stabkräfte aus dem Knotengleichgewicht, Auslastung aus Fließen und Knicken; Zugstab nur Fließen
 - Feld ohne Diagonale: als Fachwerk beweglich, als Rahmen tragfähig, Kopfverschiebung zwischen eingespanntem und gelenkigem Riegel
-- Lose Enden und abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab, im Rahmen wie im Fachwerk
-- Loses Dreieck am Mittelknoten eines Druckstabs hält nichts, der Stab knickt über die ganze Länge
+- Abgetrennte Stäbe tragen nicht; Knicklänge über Knoten ohne Querstab, im Rahmen wie im Fachwerk
 - Sprosse zwischen zwei Druckketten ohne Diagonale: im Fachwerk beweglich
 - Kragstütze mit freiem Kopf: im Rahmen instabil ab der Knicklast nach Euler-Fall 1 (kritischer Lastfaktor auf 2 % genau), im Fachwerk beweglich
 - Bewegungsform im Fachwerk: Stützen des leeren Tors bleiben gerade und drehen sich um das Fußgelenk; Querlast an einer Durchlaufstelle knickt den Zug dort
 - Stäbe zählen: Stützen und Riegel des Tors sind drei Stäbe (nicht neun Rasterstäbe), ein Querstab teilt die Stütze, eine durchgehende Diagonale ist ein Stab
+- Abzählkriterium: Tor als Fachwerk $`2 \cdot 4 - 3 - 4 = 1`$ (verschieblich), als Rahmen $`3 \cdot 4 - 3 \cdot 3 - 4 = -1`$ (einfach unbestimmt), mit Diagonale statisch bestimmt, ein loser Stab dazu macht das Fachwerk verschieblich (im Spiel ebenso); an Zufallsentwürfen ergibt $`f > 0`$ immer „beweglich“, Ausnahmefälle kommen vor und werden erkannt
+- Lose Enden: im Fachwerk verschieblich, im Rahmen ohne Last; loses Dreieck am Mittelknoten eines Druckstabs: im Rahmen Knicken über die ganze Länge, im Fachwerk verschieblich
 - Zweigelenkrahmen unter Vertikallast: Seitwärtsknicken, obwohl jeder Stab für sich hält
 - Last direkt auf dem Lager ist kein Mechanismus; eine Lagerung, die die Last zufällig nicht anregt, ist trotzdem beweglich
 - Profile: Auslastung und Masse je Profil; Bemessen wählt das kleinste Profil, das hält

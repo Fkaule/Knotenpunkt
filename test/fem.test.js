@@ -54,11 +54,13 @@ test("Feld ohne Diagonale: als Fachwerk beweglich, als Rahmen trägt es über Bi
   assert.ok(u > F * h ** 3 / (24 * EI) && u < F * h ** 3 / (6 * EI), "Kopfverschiebung plausibel");
 });
 
-test("Lose Enden und abgetrennte Stäbe tragen nicht, Fachwerk wird dadurch nicht beweglich", () => {
+test("Lose Enden: im Fachwerk verschieblich (sie drehen sich um ihren Knoten), im Rahmen steif angeschlossen und ohne Last", () => {
   const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0], [2, 0]], side: "bottom", fix: 3 }],
     loads: [{ node: [1, 1], fx: 0, fy: -F }] });
   const on = only(L, [[0, 0, 1, 1], [2, 0, 1, 1], [1, 1, 1, 0], [0, 1, 1, 1]]);   // Stummel nach unten und nach links
-  const r = FEM.analyze(L, on, "truss");
+  assert.strictEqual(FEM.analyze(L, on, "truss").reason, "mechanismus");
+  assert.ok(FEM.analyze(L, only(L, [[0, 0, 1, 1], [2, 0, 1, 1]]), "truss").ok);   // ohne die Stummel hält es
+  const r = FEM.analyze(L, on, "frame");
   assert.ok(r.ok);
   assert.strictEqual(r.fe[L.barAt(1, 1, 1, 0)], 0);
   assert.strictEqual(r.conn[L.barAt(0, 1, 1, 1)], 1);
@@ -81,16 +83,15 @@ test("Knicklänge läuft über Knoten ohne Querstab hinweg, im Rahmen wie im Fac
   near(FEM.analyze(L, chain, "truss").util[L.barAt(1, 0, 2, 0)], F / FEM.ncr(P1, 3 * FEM.GRID), 1e-6, "Knick-Auslastung Fachwerk");
 });
 
-test("Prüfbefund: loses Dreieck am Mittelknoten eines Druckstabs hält nichts, der Stab knickt über die ganze Länge", () => {
+test("Prüfbefund: loses Dreieck am Mittelknoten eines Druckstabs hält nichts (Rahmen: Knicken über die ganze Länge, Fachwerk: verschieblich)", () => {
   const L = FEM.level({ nx: 2, ny: 1, supports: [{ kind: "fest", nodes: [[0, 0]], side: "left", fix: 3 },
     { kind: "los", nodes: [[2, 0]], side: "right", fix: 2 }], loads: [{ node: [2, 0], fx: -80000, fy: 0 }] });
   const on = only(L, [[0, 0, 1, 0], [1, 0, 2, 0], [1, 0, 1, 1], [1, 1, 2, 1], [1, 0, 2, 1]]);
-  for (const model of ["truss", "frame"]) {
-    const r = FEM.analyze(L, on, model);
-    assert.strictEqual(r.fe[L.barAt(1, 0, 1, 1)], 0, `${model}: Dreieck trägt nicht`);
-    assert.strictEqual(r.Lk[L.barAt(0, 0, 1, 0)], 2 * FEM.GRID, `${model}: Knicklänge über beide Stäbe`);
-    assert.strictEqual(r.reason, "knicken", model);
-  }
+  const r = FEM.analyze(L, on, "frame");
+  assert.strictEqual(r.fe[L.barAt(1, 0, 1, 1)], 0, "Dreieck trägt nicht");
+  assert.strictEqual(r.Lk[L.barAt(0, 0, 1, 0)], 2 * FEM.GRID, "Knicklänge über beide Stäbe");
+  assert.strictEqual(r.reason, "knicken");
+  assert.strictEqual(FEM.analyze(L, on, "truss").reason, "mechanismus");   // im Fachwerk dreht sich das Dreieck um den Knoten
 });
 
 test("Prüfbefund: Sprosse zwischen zwei Druckketten hält im Fachwerk nichts (beweglich)", () => {
@@ -213,4 +214,40 @@ test("Stäbe zählen wie in der Statik: ein gerader Stabzug über Durchlaufstell
   const diag = Uint8Array.from(L.frozen);
   for (const b of [[0, 0, 1, 1], [1, 1, 2, 2], [2, 2, 3, 3]]) diag[L.barAt(...b)] = 1;   // Diagonale von Ecke zu Ecke: ein Stab
   assert.strictEqual(FEM.members(L, diag).length, 4);
+});
+
+test("Abzählkriterium: abgezählt verschieblich heißt im Spiel immer beweglich; Ausnahmefälle findet die Kinematikprüfung", () => {
+  const LEVELS = require("../src/levels.js");
+  // Tor: Stützen und Riegel; als Fachwerk 2·4 - 3 - 4 = 1 (verschieblich), als Rahmen 3·4 - 3·3 - 4 = -1 (einfach unbestimmt)
+  const L = FEM.level(LEVELS[0]);
+  assert.deepStrictEqual(FEM.counting(L, L.frozen, "truss"), { k: 4, s: 3, r: 4, f: 1 });
+  assert.deepStrictEqual(FEM.counting(L, L.frozen, "frame"), { k: 4, s: 3, r: 4, f: -1 });
+  // mit Diagonale statisch bestimmt; ein loser Stab dazu macht das Fachwerk verschieblich (2·5 - 5 - 4 = 1), im Spiel ebenso
+  const diag = Uint8Array.from(L.frozen);
+  for (const b of [[0, 0, 1, 1], [1, 1, 2, 2], [2, 2, 3, 3]]) diag[L.barAt(...b)] = 1;
+  assert.strictEqual(FEM.counting(L, diag, "truss").f, 0);
+  assert.ok(FEM.analyze(L, diag, "truss").ok);
+  const lose = Uint8Array.from(diag);
+  lose[L.barAt(0, 3, 1, 2)] = 1;
+  assert.strictEqual(FEM.counting(L, lose, "truss").f, 1);
+  assert.strictEqual(FEM.analyze(L, lose, "truss").reason, "mechanismus");
+  assert.ok(FEM.analyze(L, lose, "frame").ok);
+  // Zufallsentwürfe an allen festen Bauteilen: f > 0 muss beweglich sein
+  let seed = 7, ausnahme = 0;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (const d of LEVELS) {
+    const M = FEM.level(d);
+    for (let t = 0; t < 60; t++) {
+      const p = 0.15 + 0.8 * rnd(), on = new Uint8Array(M.nB);
+      for (let b = 0; b < M.nB; b++) on[b] = M.frozen[b] || rnd() < p ? 1 + Math.floor(rnd() * 3) : 0;
+      for (const model of ["truss", "frame"]) {
+        const r = FEM.analyze(M, on, model, true);
+        if (r.reason === "lastpfad") continue;
+        const c = FEM.counting(M, r.conn, model), beweglich = r.reason === "mechanismus";
+        assert.ok(!(c.f > 0) || beweglich, `${d.name} ${model}: abgezählt f = ${c.f}, im Spiel ${r.reason || "hält"}`);
+        if (c.f <= 0 && beweglich) ausnahme++;
+      }
+    }
+  }
+  assert.ok(ausnahme > 0, "Ausnahmefälle kommen vor und werden erkannt");
 });

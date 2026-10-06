@@ -142,6 +142,18 @@ const FEM = (() => {
     }
     return out;
   }
+  // Abzählkriterium wie in der Technischen Mechanik, an der Zeichnung abgezählt: k Knoten (Durchlaufstellen zählen nicht),
+  // s Stäbe (ein gerader Stabzug als einer), r Lagerreaktionen. Fachwerk f = 2k - s - r, Rahmen f = 3k - 3s - r. f > 0 heißt
+  // verschieblich; f = 0 statisch bestimmt und f < 0 so oft statisch unbestimmt, außer im Ausnahmefall (dann trotzdem
+  // verschieblich, das findet erst die Kinematikprüfung in analyze). Lager sitzen nie an Durchlaufstellen (nur an Randknoten).
+  function counting(L, set, model) {
+    const pass = passNodes(L, set), touched = new Uint8Array(L.nN), bits = model === 'frame' ? 7 : 3;
+    L.bars.forEach((b, k) => { if (set[k]) touched[b.a] = touched[b.b] = 1; });
+    let k = 0, r = 0;
+    for (let n = 0; n < L.nN; n++) if (touched[n] && !pass.has(n)) { k++; for (let d = L.fix[n] & bits; d; d &= d - 1) r++; }
+    const s = members(L, set).length;
+    return { k, s, r, f: model === 'frame' ? 3 * k - 3 * s - r : 2 * k - s - r };
+  }
   // Knicklänge: gerader Stabzug über Durchlaufstellen bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein
   // Lager quer hält. Ob dieser Knoten wirklich hält, prüft die Stabilitätsprüfung in analyze.
   function bucklingLength(L, fe, k, pass = passNodes(L, fe)) {
@@ -194,7 +206,8 @@ const FEM = (() => {
   let band = new Float64Array(0), band2 = new Float64Array(0);
 
   // model: 'truss' (Fachwerk) oder 'frame' (Rahmen); quick: ohne Bewegungs- und Knickform (für Bemessung und Gegner)
-  function analyze(L, on, model, quick = false) {
+  // all (nur intern): diese Stäbe als Tragwerk nehmen, ohne Anhängsel wegzulassen, und nur prüfen, ob es verschieblich ist
+  function analyze(L, on, model, quick = false, all = null) {
     const t0 = performance.now(), frame = model === 'frame', nd = frame ? 3 : 2;
     const conn = attached(L, on);
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
@@ -203,7 +216,17 @@ const FEM = (() => {
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
     if (!L.loadNodes.every(n => hit.has(n))) { res.reason = 'lastpfad'; return res; }
-    const fe = res.fe = carrying(L, conn), pass = passNodes(L, fe);
+    // Streng nach TM gehört alles, was am Lager hängt, zum Tragwerk, auch Teile, die nichts tragen (Anhängsel, Teile ohne
+    // Last). Kann sich darin etwas bewegen, ist das Ganze verschieblich, etwa ein loser Stab im Fachwerk, der sich um seinen
+    // Knoten dreht; so passt das Urteil zum Abzählkriterium. Gerechnet wird danach nur, was trägt.
+    if (!all) {
+      const fe0 = carrying(L, conn);
+      if (conn.some((c, k) => c && !fe0[k])) {
+        const whole = analyze(L, on, model, quick, conn);
+        if (whole.reason === 'mechanismus') return whole;
+      }
+    }
+    const fe = res.fe = all || carrying(L, conn), pass = passNodes(L, fe);
     for (const q of pass.keys()) res.pass[q] = 1;
 
     // Freiheitsgrade: je aktivem Knoten u, v (und beim Rahmen die Verdrehung)
@@ -365,6 +388,7 @@ const FEM = (() => {
       if (!quick) res.disp = scaled(toDisp(inverse(A, null, 4).x, true));   // A ist zerlegt (die Hilfsfedern halten sie positiv)
       return done('mechanismus');
     }
+    if (all) return done('');   // nur die Prüfung auf Verschieblichkeit des Ganzen
 
     // 4. Stabilität: elastische plus geometrische Steifigkeit (Druck macht weich, Zug steif). Nicht positiv definit heißt:
     // Das Tragwerk weicht unter den Druckkräften als Ganzes aus, auch wenn jeder Stabzug für sich nicht knickt. Geprüft wird
@@ -449,6 +473,9 @@ const FEM = (() => {
   function* size(L, on, model, retry = true) {
     const cur = Uint8Array.from(on);
     for (let it = 0; it < 16; it++) {
+      // Stäbe, die nichts tragen (lose Enden, Anhängsel), vorher weglassen: Im Fachwerk wäre ein Anhängsel verschieblich
+      const fe0 = carrying(L, attached(L, cur));
+      for (let k = 0; k < L.nB; k++) if (cur[k] && !fe0[k] && !L.frozen[k]) cur[k] = 0;
       const r = analyze(L, cur, model, true);
       yield;
       if (!r.disp || r.reason === 'mechanismus') return null;
@@ -524,7 +551,7 @@ const FEM = (() => {
     return { res: best.res, on: best.on };
   }
 
-  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, bucklingLength,
+  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, counting, bucklingLength,
     analyze, localU, size, optimize };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;

@@ -469,7 +469,7 @@
   function failWhy(r) {
     if (r.reason === 'lastpfad') return 'Die Last hat keine Verbindung zum Lager.';
     if (r.reason === 'mechanismus') return r.model === 'truss'
-      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck, ein Knoten ohne Querstab oder ein Querstab, der selbst nicht gehalten ist, gibt nach (Mechanismus).'
+      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck, ein Knoten ohne Querstab, ein Querstab, der selbst nicht gehalten ist, oder ein loser Stab, der sich um seinen Knoten dreht, gibt nach (Mechanismus).'
       : 'Das Stabwerk ist beweglich, die Lagerung reicht nicht.';
     if (r.reason === 'stabil') return 'Das Tragwerk ist instabil: Unter den Druckkräften weicht es als Ganzes seitlich aus, obwohl jeder Stab für sich hält' +
       (Number.isFinite(r.lambda) ? ` (kritischer Lastfaktor etwa ${fmt(r.lambda, 2)}).` : '.');
@@ -486,11 +486,21 @@
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${pct(r.maxUtil)} %, hält.` : failWhy(r);
+  // Abzählkriterium der gezeichneten Stäbe (die am Lager hängen) im Modell model, als Text fürs Schriftfeld
+  const counted = (on, conn, model) => FEM.counting(st.L, inSet(on, conn), model);
+  const minus = x => x < 0 ? '−' + -x : String(x);
+  const countText = (c, model) => !c.k ? 'noch nichts' : `${model === 'frame' ? `3·${c.k} − 3·${c.s}` : `2·${c.k} − ${c.s}`} − ${c.r} = ${minus(c.f)}: ` +
+    (c.f > 0 ? 'verschieblich' : c.f === 0 ? 'statisch bestimmt' : `${-c.f}-fach statisch unbestimmt`);
   // Hinweis beim Zeichnen, auch blind: Ein verschiebliches Stabwerk lässt sich nicht rechnen, es gibt weder Kräfte noch
-  // Auslastung. shown: die Zeichnung zeigt die Bewegung live
-  const moveText = (model, shown) => (model === 'truss'
-    ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten oder ein Lager fehlt.'
-    : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') + ' So lässt es sich nicht rechnen' + (shown ? '; die Zeichnung zeigt die Bewegung.' : '.');
+  // Auslastung. shown: die Zeichnung zeigt die Bewegung live; dazu, was das Abzählen ergibt
+  const moveText = (model, shown) => {
+    const c = counted(st.on, st.conn, model);
+    return (model === 'truss'
+      ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten, ein Stab hängt lose an einem Knoten oder ein Lager fehlt.'
+      : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') +
+      (c.f > 0 ? ` Abgezählt: f = ${c.f} > 0, verschieblich.` : ` Abgezählt ginge es (f = ${minus(c.f)}), es ist aber ein Ausnahmefall.`) +
+      ' So lässt es sich nicht rechnen' + (shown ? '; die Zeichnung zeigt die Bewegung.' : '.');
+  };
   const moveHtml = (model, shown) => `<b>Noch verschieblich.</b> ${moveText(model, shown)}`;
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
   function showFem(r, scale, live) {
@@ -519,6 +529,8 @@
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
     const b = barsOf(inSet(on, conn));
     $('tb-bars').textContent = `${b.count}: ${b.text}`;
+    const m = st.view && st.view.res ? st.view.res.model : mp.on && st.look ? st.look : st.model;   // das gezeigte Modell
+    $('tb-count').textContent = countText(counted(on, conn, m), m);
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
     $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
     const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
@@ -559,7 +571,7 @@
   function refresh() {
     st.conn = FEM.attached(st.L, st.on);
     st.pass = new Uint8Array(st.L.nN);
-    for (const q of FEM.passNodes(st.L, FEM.carrying(st.L, st.conn)).keys()) st.pass[q] = 1;
+    for (const q of FEM.passNodes(st.L, st.conn).keys()) st.pass[q] = 1;   // wie beim Abzählen
     const loose = st.on.some((x, k) => x && !st.conn[k]);
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
     if (st.phase === 'design') {
@@ -938,6 +950,7 @@
     $('tb-load').textContent = d ? loadText(d) : 'noch offen';
     $('tb-size').textContent = n ? `${ed.raw.nx} × ${ed.raw.ny} m, Raster 1 m` : 'noch offen';
     $('tb-bars').textContent = n ? `${st.L.nB} möglich` : 'keine';
+    $('tb-count').textContent = 'beim Spielen';
     $('tb-mass').textContent = `${fmt(kg(startOn(st.L), st.L.frozen))} kg`;
     $('tb-probe').textContent = '1 übrig';
     $('tb-sheet').textContent = 'Baukasten';

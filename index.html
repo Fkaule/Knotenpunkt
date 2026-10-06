@@ -237,6 +237,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           <tr><th>Belastung</th><td id="tb-load"></td></tr>
           <tr><th>Abmessungen</th><td id="tb-size"></td></tr>
           <tr><th>Stäbe</th><td id="tb-bars"></td></tr>
+          <tr><th>Abzählen</th><td id="tb-count"></td></tr>
           <tr><th>Masse</th><td class="big" id="tb-mass"></td></tr>
           <tr><th>Probe-Rechnung</th><td id="tb-probe"></td></tr>
           <tr><th>Blatt</th><td id="tb-sheet"></td></tr>
@@ -300,7 +301,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li><b>Instabil:</b> Druck macht ein Tragwerk weich. Die Prüfung mit elastischer plus geometrischer Steifigkeit zeigt, ob es unter den Druckkräften als Ganzes seitlich ausweicht, etwa ein Rahmen ohne Diagonale oder eine freie Kragstütze. Angezeigt wird der kritische Lastfaktor: über 1 hält es.</li>
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer hält.</li>
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet, und er zählt als ein Stab.</li>
-            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts, zählen aber bei der Masse.</li>
+            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts und zählen bei der Masse. Im Fachwerk drehen sie sich um ihren Knoten: Dann ist das Fachwerk verschieblich, wie nach dem Abzählkriterium.</li>
+            <li><b>Abzählkriterium</b> (Schriftfeld): k Knoten, s Stäbe, r Lagerreaktionen (Festlager 2, Loslager 1, Einspannung je Knoten 2 im Fachwerk, 3 im Rahmen). Fachwerk f = 2k − s − r, Rahmen f = 3k − 3s − r. f &gt; 0 heißt verschieblich, f = 0 statisch bestimmt, f &lt; 0 so oft statisch unbestimmt. Ist es trotz f ≤ 0 verschieblich, ist es ein Ausnahmefall; den findet die Rechnung.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
             <li><b>Zufall und Baukasten:</b> Zu jeder Nummer gehört ein festes Bauteil, gleich auf jedem Gerät. Die Lasten sind so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, auf glatte Beträge gerundet. So ist jedes Bauteil lösbar: Das volle Raster hält als Fachwerk und als Rahmen. Im Baukasten gilt das auch für selbst gesetzte Beträge.</li>
           </ul>
@@ -469,6 +471,18 @@ const FEM = (() => {
     }
     return out;
   }
+  // Abzählkriterium wie in der Technischen Mechanik, an der Zeichnung abgezählt: k Knoten (Durchlaufstellen zählen nicht),
+  // s Stäbe (ein gerader Stabzug als einer), r Lagerreaktionen. Fachwerk f = 2k - s - r, Rahmen f = 3k - 3s - r. f > 0 heißt
+  // verschieblich; f = 0 statisch bestimmt und f < 0 so oft statisch unbestimmt, außer im Ausnahmefall (dann trotzdem
+  // verschieblich, das findet erst die Kinematikprüfung in analyze). Lager sitzen nie an Durchlaufstellen (nur an Randknoten).
+  function counting(L, set, model) {
+    const pass = passNodes(L, set), touched = new Uint8Array(L.nN), bits = model === 'frame' ? 7 : 3;
+    L.bars.forEach((b, k) => { if (set[k]) touched[b.a] = touched[b.b] = 1; });
+    let k = 0, r = 0;
+    for (let n = 0; n < L.nN; n++) if (touched[n] && !pass.has(n)) { k++; for (let d = L.fix[n] & bits; d; d &= d - 1) r++; }
+    const s = members(L, set).length;
+    return { k, s, r, f: model === 'frame' ? 3 * k - 3 * s - r : 2 * k - s - r };
+  }
   // Knicklänge: gerader Stabzug über Durchlaufstellen bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein
   // Lager quer hält. Ob dieser Knoten wirklich hält, prüft die Stabilitätsprüfung in analyze.
   function bucklingLength(L, fe, k, pass = passNodes(L, fe)) {
@@ -521,7 +535,8 @@ const FEM = (() => {
   let band = new Float64Array(0), band2 = new Float64Array(0);
 
   // model: 'truss' (Fachwerk) oder 'frame' (Rahmen); quick: ohne Bewegungs- und Knickform (für Bemessung und Gegner)
-  function analyze(L, on, model, quick = false) {
+  // all (nur intern): diese Stäbe als Tragwerk nehmen, ohne Anhängsel wegzulassen, und nur prüfen, ob es verschieblich ist
+  function analyze(L, on, model, quick = false, all = null) {
     const t0 = performance.now(), frame = model === 'frame', nd = frame ? 3 : 2;
     const conn = attached(L, on);
     const res = { ok: false, reason: '', model, on: Uint8Array.from(on), conn, fe: null, pass: new Uint8Array(L.nN),
@@ -530,7 +545,17 @@ const FEM = (() => {
     const hit = new Set();
     L.bars.forEach((b, k) => { if (conn[k]) { hit.add(b.a); hit.add(b.b); } });
     if (!L.loadNodes.every(n => hit.has(n))) { res.reason = 'lastpfad'; return res; }
-    const fe = res.fe = carrying(L, conn), pass = passNodes(L, fe);
+    // Streng nach TM gehört alles, was am Lager hängt, zum Tragwerk, auch Teile, die nichts tragen (Anhängsel, Teile ohne
+    // Last). Kann sich darin etwas bewegen, ist das Ganze verschieblich, etwa ein loser Stab im Fachwerk, der sich um seinen
+    // Knoten dreht; so passt das Urteil zum Abzählkriterium. Gerechnet wird danach nur, was trägt.
+    if (!all) {
+      const fe0 = carrying(L, conn);
+      if (conn.some((c, k) => c && !fe0[k])) {
+        const whole = analyze(L, on, model, quick, conn);
+        if (whole.reason === 'mechanismus') return whole;
+      }
+    }
+    const fe = res.fe = all || carrying(L, conn), pass = passNodes(L, fe);
     for (const q of pass.keys()) res.pass[q] = 1;
 
     // Freiheitsgrade: je aktivem Knoten u, v (und beim Rahmen die Verdrehung)
@@ -692,6 +717,7 @@ const FEM = (() => {
       if (!quick) res.disp = scaled(toDisp(inverse(A, null, 4).x, true));   // A ist zerlegt (die Hilfsfedern halten sie positiv)
       return done('mechanismus');
     }
+    if (all) return done('');   // nur die Prüfung auf Verschieblichkeit des Ganzen
 
     // 4. Stabilität: elastische plus geometrische Steifigkeit (Druck macht weich, Zug steif). Nicht positiv definit heißt:
     // Das Tragwerk weicht unter den Druckkräften als Ganzes aus, auch wenn jeder Stabzug für sich nicht knickt. Geprüft wird
@@ -776,6 +802,9 @@ const FEM = (() => {
   function* size(L, on, model, retry = true) {
     const cur = Uint8Array.from(on);
     for (let it = 0; it < 16; it++) {
+      // Stäbe, die nichts tragen (lose Enden, Anhängsel), vorher weglassen: Im Fachwerk wäre ein Anhängsel verschieblich
+      const fe0 = carrying(L, attached(L, cur));
+      for (let k = 0; k < L.nB; k++) if (cur[k] && !fe0[k] && !L.frozen[k]) cur[k] = 0;
       const r = analyze(L, cur, model, true);
       yield;
       if (!r.disp || r.reason === 'mechanismus') return null;
@@ -851,7 +880,7 @@ const FEM = (() => {
     return { res: best.res, on: best.on };
   }
 
-  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, bucklingLength,
+  return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, counting, bucklingLength,
     analyze, localU, size, optimize };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;
@@ -1671,7 +1700,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   function failWhy(r) {
     if (r.reason === 'lastpfad') return 'Die Last hat keine Verbindung zum Lager.';
     if (r.reason === 'mechanismus') return r.model === 'truss'
-      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck, ein Knoten ohne Querstab oder ein Querstab, der selbst nicht gehalten ist, gibt nach (Mechanismus).'
+      ? 'Das Fachwerk ist beweglich: Ein Feld ohne Dreieck, ein Knoten ohne Querstab, ein Querstab, der selbst nicht gehalten ist, oder ein loser Stab, der sich um seinen Knoten dreht, gibt nach (Mechanismus).'
       : 'Das Stabwerk ist beweglich, die Lagerung reicht nicht.';
     if (r.reason === 'stabil') return 'Das Tragwerk ist instabil: Unter den Druckkräften weicht es als Ganzes seitlich aus, obwohl jeder Stab für sich hält' +
       (Number.isFinite(r.lambda) ? ` (kritischer Lastfaktor etwa ${fmt(r.lambda, 2)}).` : '.');
@@ -1688,11 +1717,21 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     return `${t[0].toUpperCase() + t.slice(1)}, max. Auslastung ${pct(r.maxUtil)} %.`;
   }
   const statusText = r => r.ok ? `max. Auslastung ${pct(r.maxUtil)} %, hält.` : failWhy(r);
+  // Abzählkriterium der gezeichneten Stäbe (die am Lager hängen) im Modell model, als Text fürs Schriftfeld
+  const counted = (on, conn, model) => FEM.counting(st.L, inSet(on, conn), model);
+  const minus = x => x < 0 ? '−' + -x : String(x);
+  const countText = (c, model) => !c.k ? 'noch nichts' : `${model === 'frame' ? `3·${c.k} − 3·${c.s}` : `2·${c.k} − ${c.s}`} − ${c.r} = ${minus(c.f)}: ` +
+    (c.f > 0 ? 'verschieblich' : c.f === 0 ? 'statisch bestimmt' : `${-c.f}-fach statisch unbestimmt`);
   // Hinweis beim Zeichnen, auch blind: Ein verschiebliches Stabwerk lässt sich nicht rechnen, es gibt weder Kräfte noch
-  // Auslastung. shown: die Zeichnung zeigt die Bewegung live
-  const moveText = (model, shown) => (model === 'truss'
-    ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten oder ein Lager fehlt.'
-    : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') + ' So lässt es sich nicht rechnen' + (shown ? '; die Zeichnung zeigt die Bewegung.' : '.');
+  // Auslastung. shown: die Zeichnung zeigt die Bewegung live; dazu, was das Abzählen ergibt
+  const moveText = (model, shown) => {
+    const c = counted(st.on, st.conn, model);
+    return (model === 'truss'
+      ? 'Das Fachwerk kann sich bewegen, ohne dass sich ein Stab dehnt: Meist fehlt in einem Feld die Diagonale, ein Knoten ist quer nicht gehalten, ein Stab hängt lose an einem Knoten oder ein Lager fehlt.'
+      : 'Das Stabwerk kann sich bewegen, die Lagerung reicht noch nicht.') +
+      (c.f > 0 ? ` Abgezählt: f = ${c.f} > 0, verschieblich.` : ` Abgezählt ginge es (f = ${minus(c.f)}), es ist aber ein Ausnahmefall.`) +
+      ' So lässt es sich nicht rechnen' + (shown ? '; die Zeichnung zeigt die Bewegung.' : '.');
+  };
   const moveHtml = (model, shown) => `<b>Noch verschieblich.</b> ${moveText(model, shown)}`;
   const overText = scale => scale >= 1 ? `${fmt(scale, scale % 1 ? 1 : 0)}-fach überhöht` : 'verkleinert dargestellt';
   function showFem(r, scale, live) {
@@ -1721,6 +1760,8 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
     const b = barsOf(inSet(on, conn));
     $('tb-bars').textContent = `${b.count}: ${b.text}`;
+    const m = st.view && st.view.res ? st.view.res.model : mp.on && st.look ? st.look : st.model;   // das gezeigte Modell
+    $('tb-count').textContent = countText(counted(on, conn, m), m);
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
     $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
     const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
@@ -1761,7 +1802,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   function refresh() {
     st.conn = FEM.attached(st.L, st.on);
     st.pass = new Uint8Array(st.L.nN);
-    for (const q of FEM.passNodes(st.L, FEM.carrying(st.L, st.conn)).keys()) st.pass[q] = 1;
+    for (const q of FEM.passNodes(st.L, st.conn).keys()) st.pass[q] = 1;   // wie beim Abzählen
     const loose = st.on.some((x, k) => x && !st.conn[k]);
     const hint = loose ? '<p>Rot gestrichelte Stäbe haben keine Verbindung zum Lager und fallen beim Abgeben ab.</p>' : '';
     if (st.phase === 'design') {
@@ -2140,6 +2181,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('tb-load').textContent = d ? loadText(d) : 'noch offen';
     $('tb-size').textContent = n ? `${ed.raw.nx} × ${ed.raw.ny} m, Raster 1 m` : 'noch offen';
     $('tb-bars').textContent = n ? `${st.L.nB} möglich` : 'keine';
+    $('tb-count').textContent = 'beim Spielen';
     $('tb-mass').textContent = `${fmt(kg(startOn(st.L), st.L.frozen))} kg`;
     $('tb-probe').textContent = '1 übrig';
     $('tb-sheet').textContent = 'Baukasten';

@@ -232,6 +232,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
           <tr><th>Belastung</th><td id="tb-load"></td></tr>
           <tr><th>Abmessungen</th><td id="tb-size"></td></tr>
           <tr><th>Stäbe</th><td id="tb-bars"></td></tr>
+          <tr><th>Abzählen</th><td id="tb-count"></td></tr>
           <tr><th>Masse</th><td class="big" id="tb-mass"></td></tr>
           <tr><th>Probe-Rechnung</th><td id="tb-probe"></td></tr>
           <tr><th>Blatt</th><td id="tb-sheet"></td></tr>
@@ -295,7 +296,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
             <li><b>Instabil:</b> Druck macht ein Tragwerk weich. Die Prüfung mit elastischer plus geometrischer Steifigkeit zeigt, ob es unter den Druckkräften als Ganzes seitlich ausweicht, etwa ein Rahmen ohne Diagonale oder eine freie Kragstütze. Angezeigt wird der kritische Lastfaktor: über 1 hält es.</li>
             <li>Nachweis je Stab: Spannung |N| / A + |M|max / W höchstens 235 MPa. Druckstäbe knicken nach Euler, beidseitig gelenkig gelagert; Knicklänge ist der gerade Stabzug bis zum nächsten Knoten, an dem ein Stab quer ansetzt oder ein Lager quer hält.</li>
             <li>Wo ein Stab ohne Querstab gerade weiterläuft, ist kein Knoten: Er läuft als ein Profil durch, auch im Fachwerk, und wird über die ganze Länge auf Knicken geprüft. Deshalb ist dort kein Gelenk gezeichnet, und er zählt als ein Stab.</li>
-            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts, zählen aber bei der Masse.</li>
+            <li>Stäbe ohne Verbindung zum Lager fallen ab. Lose Enden und Teile, die nur an einem einzigen Knoten hängen, tragen nichts und zählen bei der Masse. Im Fachwerk drehen sie sich um ihren Knoten: Dann ist das Fachwerk verschieblich, wie nach dem Abzählkriterium.</li>
+            <li><b>Abzählkriterium</b> (Schriftfeld): k Knoten, s Stäbe, r Lagerreaktionen (Festlager 2, Loslager 1, Einspannung je Knoten 2 im Fachwerk, 3 im Rahmen). Fachwerk f = 2k − s − r, Rahmen f = 3k − 3s − r. f &gt; 0 heißt verschieblich, f = 0 statisch bestimmt, f &lt; 0 so oft statisch unbestimmt. Ist es trotz f ≤ 0 verschieblich, ist es ein Ausnahmefall; den findet die Rechnung.</li>
             <li>Gegner ist ein Algorithmus: Er beginnt mit dem vollen Raster, nimmt immer den am wenigsten ausgelasteten Stab weg und gibt danach jedem Stab das kleinste Profil, das hält, solange das Tragwerk leichter wird. Weil das Ergebnis vom Weg abhängt, rechnet er mehrere Läufe und nimmt den leichtesten.</li>
             <li><b>Zufall und Baukasten:</b> Zu jeder Nummer gehört ein festes Bauteil, gleich auf jedem Gerät. Die Lasten sind so bemessen, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, auf glatte Beträge gerundet. So ist jedes Bauteil lösbar: Das volle Raster hält als Fachwerk und als Rahmen. Im Baukasten gilt das auch für selbst gesetzte Beträge.</li>
           </ul>
