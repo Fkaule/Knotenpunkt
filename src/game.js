@@ -352,7 +352,9 @@
       });
       ctx.restore();
       drawNodes(pts.map((p, k) => p ? k : -1).filter(k => k >= 0), on, r.model, n => nodeXY(r, n, scale), r.pass);
-      if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) { if (st.out === 'util') drawMax(r, pts[r.maxBar]); else drawValues(r, pts); }
+      let taken = [];   // gesetzte Beschriftungen (Pixel), denen der Wert der Verschiebung ausweicht
+      if (colors && sweepX >= L.def.nx && !(v.fall && v.fall.p > 0)) taken = st.out === 'util' ? [drawMax(r, pts[r.maxBar])].filter(Boolean) : drawValues(r, pts);
+      if (!mech && !v.fall && sweepX >= L.def.nx) drawDispMax(r, scale, pts, taken);
     }
     if (v.loose) drawFalling(v.loose.set, v.loose.p, on, () => C.steel);
     else drawLoose(Array.from({ length: L.nB }, (_, k) => k).filter(k => on[k] && !r.conn[k]), on);
@@ -375,6 +377,7 @@
     return `${fmt(v / 10 ** e, 1)}·10⁻${[...String(-e)].map(c => HOCH[c]).join('')}`;
   }
   const kNsig = n => sig(n / 1000);   // Kraft (N) in kN
+  const lenTxt = mm => mm >= 1000 ? `${sig(mm / 1000)} m` : `${sig(mm)} mm`;   // Verschiebung, ab 1 m in m
   const kNm = m => { const v = Math.abs(m) / 1e6; return `${fmt(v, v < 10 ? 2 : v < 100 ? 1 : 0)} kNm`; };   // Nmm in kNm
   function barColor(r, k) {
     if (st.out === 'force') return nullStab(r, k) ? C.steel2 : ohneN(r, k) ? BIEGUNG : r.N[k] > 0 ? ZUG : DRUCK;
@@ -413,6 +416,7 @@
     }
     ctx.restore();
     if (st.out === 'force') drawReactions(r);
+    return placed;
   }
   // Lagerkräfte: Pfeil in Richtung der Kraft, die das Lager aufs Tragwerk ausübt, mit Betrag (im Rahmen an Einspannungen dazu
   // das Moment). Der Pfeil liegt immer auf der Lagerseite außen: zeigt die Kraft ins Tragwerk, endet er am Knoten, sonst
@@ -521,7 +525,7 @@
     ctx.restore();
   }
   function drawMax(r, pts) {
-    if (r.maxBar < 0 || !pts) return;
+    if (r.maxBar < 0 || !pts) return null;
     const [cx, cy] = pts[Math.floor(pts.length / 2)], txt = `Max ${pct(r.maxUtil)} %${knickt(r, r.maxBar) ? ' Knicken' : ''}`;
     ctx.save(); ctx.font = `600 ${Math.max(11, G.s * 0.2)}px ${MONO}`;
     const w = ctx.measureText(txt).width + 12, h = Math.max(18, G.s * 0.3);
@@ -531,6 +535,45 @@
     ctx.fillStyle = C.sheet; ctx.fillRect(lx, ly, w, h); ctx.strokeRect(lx, ly, w, h);
     ctx.fillStyle = C.ink; ctx.textBaseline = 'middle'; ctx.fillText(txt, lx + 6, ly + h / 2);
     ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 7); ctx.fill();
+    ctx.restore();
+    return [lx, ly, lx + w, ly + h];
+  }
+  // Größte Verschiebung: Ring um den Knoten in der gezeichneten Lage, daneben der echte Wert. Der Wert steht zuerst auf der
+  // Seite, zu der sich der Knoten bewegt, sonst in 45°-Schritten daneben, wo er keinen Stab, keinen Lastpfeil und keine
+  // Beschriftung (taken, dazu die der Lasten) berührt; geht das nirgends, lieber über einem Stab als über einer Beschriftung.
+  function drawDispMax(r, scale, pts, taken) {
+    let n = -1, m = 0;
+    for (let q = 0; q < st.L.nN; q++) { const d = Math.hypot(r.disp[q * 3], r.disp[q * 3 + 1]); if (d > m) { m = d; n = q; } }
+    if (n < 0) return;
+    const [x, y] = nodeXY(r, n, scale), s = G.s, rad = Math.max(7, s * 0.11), t = `max. ${lenTxt(m)}`;
+    ctx.save(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.stroke();
+    ctx.font = `600 ${Math.max(10, s * 0.15)}px ${MONO}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    const w = ctx.measureText(t).width + 6, h = Math.max(14, s * 0.21), gap = rad + 4;
+    const segs = [], labels = taken.slice();
+    pts.forEach(p => { if (p) for (let i = 1; i < p.length; i++) segs.push([p[i - 1], p[i]]); });
+    for (const g of loadGeoms(s)) {
+      segs.push([P(g.tail), P(g.tip)]);
+      if (!labelBelow(st.def)) { const [a0, b0] = P([g.box[0], g.box[3]]), [a1, b1] = P([g.box[2], g.box[1]]); labels.push([a0, b0, a1, b1]); }
+    }
+    const over = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    const onSeg = b => segs.some(([p, q]) => {
+      for (let u = 0; u <= 1.0001; u += 0.05) { const px = p[0] + (q[0] - p[0]) * u, py = p[1] + (q[1] - p[1]) * u; if (px > b[0] && px < b[2] && py > b[1] && py < b[3]) return true; }
+      return false;
+    });
+    const a0 = Math.atan2(-r.disp[n * 3 + 1], r.disp[n * 3]);
+    let box = null, best = 9;
+    for (const k of [0, 1, -1, 2, -2, 3, -3, 4]) {
+      const a = a0 + k * Math.PI / 4, cx = x + Math.cos(a) * (gap + w / 2), cy = y + Math.sin(a) * (gap + h / 2);
+      const b = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+      if (b[0] < 2 || b[1] < 2 || b[2] > G.W - 2 || b[3] > G.H - 2) continue;
+      const score = (labels.some(o => over(o, b)) ? 2 : 0) + (onSeg(b) ? 1 : 0);
+      if (score < best) { box = b; best = score; if (!score) break; }
+    }
+    if (box) {
+      ctx.fillStyle = C.sheet; ctx.globalAlpha = 0.85; ctx.fillRect(box[0], box[1], w, h);
+      ctx.globalAlpha = 1; ctx.fillStyle = C.ink; ctx.fillText(t, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2);
+    }
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
@@ -665,7 +708,7 @@
   function showFem(r, scale, live) {
     let t = '';
     const lam = Number.isFinite(r.lambda) ? `kritischer Lastfaktor ${r.lambda < 10 ? fmt(r.lambda, 2) : 'über 10'}` : '';
-    const dmax = r.disp && !modeShape(r) ? `größte Verschiebung ${sig(maxDisp(r))} mm` : '';   // echt, nicht überhöht
+    const dmax = r.disp && !modeShape(r) ? `größte Verschiebung ${lenTxt(maxDisp(r))}` : '';   // echt, nicht überhöht
     if (live) t = !r.disp ? '' : r.reason === 'mechanismus' ? `Verformung live als ${NAME[r.model]}: Das Stabwerk gibt nach, es ist beweglich.`
       : r.reason === 'stabil' ? `Verformung live als ${NAME[r.model]}: Das Tragwerk knickt als Ganzes aus.`
       : `Verformung live als ${NAME[r.model]}, ${overText(scale)}, ${dmax}.`;
