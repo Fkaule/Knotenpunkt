@@ -75,6 +75,12 @@ canvas.grabbing { cursor: grabbing; }
 .legend i { display: block; width: clamp(18px, 3.4vw, 30px); height: 12px; }
 .legend li span { font-size: 10.5px; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
 .legend .lg-t { font: 600 12px var(--f-body); color: var(--ink); }
+.duel { border: 2px solid var(--accent); padding: 8px 10px; font-size: 14.5px; line-height: 1.5; display: grid; gap: 4px; }
+.duel p { margin: 0; }
+#b-duel { grid-column: 1 / -1; }
+.share { display: grid; gap: 8px; }
+.share-link { margin: 0; font: 12px/1.4 var(--f-mono); color: var(--ink2); overflow-wrap: anywhere; user-select: all; }
+.share-msg { margin: 0; font-size: 13px; color: var(--ink2); }
 .legend ol.cats { flex-wrap: wrap; gap: 4px 12px; }   /* Kategorien: Farbe und Text nebeneinander */
 .legend ol.cats li { display: flex; align-items: center; gap: 5px; }
 .legend ol.cats i { width: 14px; }
@@ -173,6 +179,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 .rank .vl { font-family: var(--f-mono); }
 .rank li.me { font-weight: 700; }
 .rank li.ghost { color: var(--ink2); font-style: italic; }
+.rank li.gap { color: var(--ink2); }
 .rank li.out .vl { color: var(--bad); }
 .board .rank { font-size: clamp(15px, 1.7vw, 21px); }
 @media (prefers-reduced-motion: reduce) { .stamp.hit { animation: none; } }
@@ -258,6 +265,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
       </table>
 
       <div id="solo-ui" class="side">
+        <div class="duel" id="duel" hidden></div>
         <div class="model" id="model-row" role="group" aria-label="Rechenmodell">
           <span id="model-label">Rechnen als</span>
           <span class="tools">
@@ -296,8 +304,15 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         </div>
         <div class="actions" id="act-result" hidden>
           <button class="btn primary" id="b-retry" type="button">Neuer Versuch</button>
+          <button class="btn" id="b-duel" type="button" hidden>Kommilitonen herausfordern</button>
           <button class="btn" id="b-eso" type="button">Lösung des Algorithmus</button>
           <button class="btn" id="b-next" type="button">Nächstes Bauteil</button>
+        </div>
+        <div class="share" id="share" hidden>
+          <label class="field">Ihr Name für die Herausforderung<input id="share-name" maxlength="16" autocomplete="nickname"></label>
+          <button class="btn" id="b-copy" type="button">Link kopieren</button>
+          <p class="share-link" id="share-link"></p>
+          <p class="share-msg" id="share-msg">Wer den Link öffnet, bekommt dasselbe Bauteil mit denselben Regeln und muss leichter bauen.</p>
         </div>
 
         <div class="verdict" id="verdict" aria-live="polite"></div>
@@ -1362,6 +1377,8 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   // Ergebnisansicht; res: Ergebnis je Modell; prof: Profil, mit dem gezeichnet wird; liveDef, liveUtil: beim Zeichnen
   // Verformung und Auslastung zeigen (einzeln oder zusammen)
   // key: Bauteil für Zwischenspeicher (fest: Nummer, Zufall: z und Nummer, eigenes: b und Code)
+  // Herausforderung per Link: { key (Bauteil), model, grav, buck (Regeln), kg10 (Masse mal 10), name, part (für loadLevel) }
+  let duel = null;
   const st = { li: 0, key: '0', def: null, L: null, on: null, conn: null, undo: [], phase: 'design', probes: 1,
     model: store.get('model') === 'frame' ? 'frame' : 'truss', shown: 'truss', res: null, view: { mode: 'blind' },
     prof: 1, liveDef: store.get('live-def') !== false, liveUtil: store.get('live-util') === true, liveRef: {},
@@ -2019,6 +2036,10 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('act-edit').hidden = $('etools').hidden = $('howto-edit').hidden = !edit;
     $('ledit').hidden = !(edit && ed.tool === 'last' && ed.loads.length);
     $('model-row').hidden = $('live-row').hidden = edit;
+    $('lv-util').hidden = !!duel;   // in einer Herausforderung keine Live-Auslastung
+    // herausfordern nur mit einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist
+    $('b-duel').hidden = mp.on || st.phase !== 'result' || mine10() < 0 || st.practice;
+    if (st.phase !== 'result') $('share').hidden = true;
     if (!mp.on) $('profiles').hidden = $('howto').hidden = edit;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
@@ -2075,7 +2096,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
         $('verdict').innerHTML = moving ? `<p class="warnbox">${moveHtml(st.model, false)}</p>${hint}` : `<p>${st.def.note}</p>${hint}`;
       }
     }
-    panel(); controls(); render(); mpRender();
+    panel(); controls(); render(); mpRender(); duelRender();
   }
 
   // i: festes Bauteil, RANDOM mit Nummer oder CUSTOM mit Code als arg
@@ -2084,12 +2105,13 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     let def = i === RANDOM ? PARTS.generate(arg) : i === CUSTOM ? PARTS.fromCode(arg) : LEVELS[i];
     if (!def) { i = 0; def = LEVELS[0]; }
     st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def); applyOpts();
-    st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false;
+    if (duel && duel.key !== partKey()) duel = null;   // anderes Bauteil beendet die Herausforderung
+    st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.busy = false; st.practice = st.liveUtil;
     st.drag = null; st.hover = null;
     $('stamp').hidden = true;
     document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
     // Zufalls- und eigene Bauteile im Link festhalten, damit man sie wiederholen oder weitergeben kann (Raumcodes bleiben)
-    if (!mp.on && (i >= RANDOM || /^#(nr|bau)-/.test(location.hash))) {
+    if (!mp.on && !duel && (i >= RANDOM || /^#(nr|bau|duell)[-~]/.test(location.hash))) {
       try { history.replaceState(null, '', def.nr ? '#nr-' + def.nr : def.code ? '#bau-' + def.code : location.pathname + location.search); } catch {}
     }
     layout(); refresh(); startEso();
@@ -2214,6 +2236,55 @@ if (typeof module !== 'undefined') module.exports = PARTS;
       h += `<p>Algorithmus (als ${NAME[m]}): ${fmt(em)} kg, max. Auslastung ${pct(e.res.maxUtil)} %. ${cmp}</p>`;
     }
     $('verdict').innerHTML = h;
+    duelRender();
+  }
+
+  // ---------- Herausforderung ----------
+  // Link mit Bauteil, Regeln (Rechenmodell, Eigengewicht, Knicken), Masse und Namen; wer ihn öffnet, spielt dasselbe Bauteil
+  // nach denselben Regeln und versucht, leichter zu bauen. Nichts wird gespeichert. Die Links gehen an die öffentliche Seite,
+  // die ohne VPN erreichbar ist (lokal zum Testen an die eigene).
+  const PUBLIC_URL = 'https://fkaule.github.io/Knotenpunkt/';
+  const partKey = () => st.def.nr ? 'z' + st.def.nr : st.def.code ? 'b' + st.def.code : 'f' + st.li;
+  const rulesText = (model, grav, buck) => `als ${NAME[model]}${grav ? ', mit Eigengewicht' : ''}${buck ? '' : ', ohne Knicken'}`;
+  function parseDuel(hash) {
+    const m = /^#duell~(f\d|z[1-9]\d{0,4}|b[^~]+)~([tf])~([01])([01])~(\d{1,6})~([^~]*)$/.exec(hash);
+    if (!m || !(+m[5] > 0)) return null;
+    let name = '';
+    try { name = clean(decodeURIComponent(m[6]), 16); } catch {}
+    const k = m[1], part = k[0] === 'f' ? [+k[1]] : k[0] === 'z' ? [RANDOM, +k.slice(1)] : [CUSTOM, k.slice(1)];
+    if ((k[0] === 'f' && part[0] >= LEVELS.length) || (part[0] === CUSTOM && !PARTS.fromCode(part[1]))) return null;
+    return { key: k, model: MODEL[m[2]], grav: m[3] === '1', buck: m[4] === '1', kg10: +m[5], name: name || 'Jemand', part };
+  }
+  // eigenes Ergebnis (Masse mal 10) im gewerteten Modell, wenn es hält, sonst -1
+  const mine10 = () => { const r = st.res && st.res[st.model]; return r && r.ok ? Math.round(kg(st.on, r.conn) * 10) : -1; };
+  function shareLink() {
+    const base = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? location.origin + location.pathname : PUBLIC_URL;
+    const name = clean($('share-name').value, 16) || 'Jemand';
+    return `${base}#duell~${partKey()}~${st.model === 'frame' ? 'f' : 't'}~${st.grav ? 1 : 0}${st.buck ? 1 : 0}~${mine10()}~${encodeURIComponent(name)}`;
+  }
+  // Herausforderung annehmen: Regeln des Links gelten für diesen Versuch (nicht gespeichert), Live-Auslastung ruht
+  function startDuel(d) {
+    duel = d;
+    st.model = d.model; st.grav = d.grav; st.buck = d.buck; st.liveUtil = false;
+    outUi();
+    loadLevel(...d.part);
+  }
+  // oben im Bedienfeld: vor dem Werten das Ziel, danach der Ausgang
+  function duelRender() {
+    const el = $('duel');
+    el.hidden = !duel || mp.on || st.phase === 'edit';
+    if (el.hidden) return;
+    const who = esc(duel.name), goal = fmt(duel.kg10 / 10, 1) + ' kg';
+    let h = `<p><b>Herausforderung von ${who}</b> (${rulesText(duel.model, duel.grav, duel.buck)}): Das Tragwerk von ${who} wiegt ${goal} ` +
+      'und hält. Schaffen Sie es leichter?</p>';
+    if (st.phase === 'result' && st.res && !st.busy) {
+      const mine = mine10();
+      h = mine >= 0 && mine < duel.kg10 ? `<p><span class="t-ok">Gewonnen!</span> ${fmt(mine / 10, 1)} kg gegen ${goal} von ${who}.</p>`
+        : mine === duel.kg10 ? `<p><b>Gleichstand</b> mit ${who}: beide ${goal}.</p>`
+        : `<p><span class="t-bad">${who} liegt vorn:</span> ${goal} gegen ${mine < 0 ? 'Bruch' : fmt(mine / 10, 1) + ' kg'}.</p>`;
+      h += `<p>„Neuer Versuch“ startet dasselbe Bauteil noch einmal${mine >= 0 ? ', „Kommilitonen herausfordern“ schickt Ihr Ergebnis zurück' : ''}.</p>`;
+    }
+    el.innerHTML = h;
   }
 
   // Umschalten des Modells: im Entwurf das gewertete Modell, nach dem Abgeben nur die Ansicht
@@ -2222,6 +2293,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     if (st.phase === 'design' || st.phase === 'probe') {
       if (m === st.model) return;
       st.model = m; store.set('model', m);
+      if (duel) { duel = null; duelRender(); }   // andere Regeln beenden die Herausforderung
       st.phase = 'design';
       refresh(); startEso();
       return;
@@ -2235,7 +2307,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   function toggleLive(what) {
     if (!editable()) return;
     if (what === 'def') { st.liveDef = !st.liveDef; store.set('live-def', st.liveDef); }
-    else { st.liveUtil = !st.liveUtil; store.set('live-util', st.liveUtil); }
+    else { st.liveUtil = !st.liveUtil; store.set('live-util', st.liveUtil); if (st.liveUtil) st.practice = true; }
     st.phase = 'design';
     refresh();
   }
@@ -2243,6 +2315,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   function setOpt(which) {
     if (!editable()) return;
     if (which === 'grav') { st.grav = !st.grav; store.set('grav', st.grav); } else { st.buck = !st.buck; store.set('buck', st.buck); }
+    if (duel) { duel = null; duelRender(); }   // andere Regeln beenden die Herausforderung
     applyOpts(); st.phase = 'design';
     outUi(); refresh(); startEso();
   }
@@ -2779,6 +2852,23 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   // Rangfolge einer Runde: was hält, nach Masse aufsteigend, danach was versagt. Gleiche Masse gleicher Platz,
   // alle, die versagen, teilen sich den letzten.
   const rankSort = list => list.sort((a, b) => (b.ok - a.ok) || (a.kg - b.kg));
+  // Live-Rangliste für alle, die mitspielen: Entwürfe, die gerade halten, nach Masse (der leichteste vorn). Bei vielen nur die
+  // ersten LIVE_TOP, die eigene Zeile immer.
+  const LIVE_TOP = 5;
+  function liveTop(rid) {
+    const me = myPeer(), list = players().filter(p => p.presence.r === rid).map(p => ({ peer: p.peer, name: clean(p.presence.n, 16) || 'Jemand',
+      kg: Math.max(0, Math.min(1e6, Number(p.presence.kg) || 0)) / 10, ok: p.presence.ok === 1 }));
+    if (plays()) list.push({ peer: me, name: `${mp.name || 'Sie'} (Sie)`, kg: (Number(myPres.kg) || 0) / 10, ok: myPres.ok === 1 });
+    const hold = rankSort(list.filter(e => e.ok)), pl = places(hold), mine = hold.findIndex(e => e.peer === me);
+    const row = i => `<li class="${hold[i].peer === me ? 'me' : ''}"><span class="pl">${pl[i]}.</span>` +
+      `<span class="nm">${esc(hold[i].name)}</span><span class="vl">${fmt(hold[i].kg, 1)} kg</span></li>`;
+    const rows = hold.slice(0, LIVE_TOP).map((e, i) => row(i));
+    if (mine > LIVE_TOP) rows.push('<li class="gap"><span class="pl">…</span></li>');
+    if (mine >= LIVE_TOP) rows.push(row(mine));
+    const note = `${hold.length} von ${list.length} ${list.length === 1 ? 'Entwurf hält' : 'Entwürfen halten'} gerade` +
+      (plays() && mine < 0 ? ', Ihrer noch nicht.' : '.');
+    return (rows.length ? `<ol class="rank">${rows.join('')}</ol>` : '') + `<p class="mp-note">${note}</p>`;
+  }
   const places = list => list.map((e, i) => {
     let p = i;
     while (p > 0 && list[p - 1].ok === e.ok && (!e.ok || list[p - 1].kg === e.kg)) p--;
@@ -3144,10 +3234,12 @@ if (typeof module !== 'undefined') module.exports = PARTS;
         <button class="btn" type="button" data-act="undo">Rückgängig</button>
         <button class="btn" type="button" data-act="clear">Alles leeren</button>
       </div>
-      <p id="mp-msg"></p>`,
+      <p id="mp-msg"></p>
+      <h3>Live-Rangliste</h3><div id="mp-top"></div>`,
     'p-locked': () => `<p class="mp-net" id="mp-net"></p>
       <p><b>Abgegeben.</b> Die Auflösung startet, sobald alle fertig sind oder die Zeit abläuft.</p>
-      <p id="mp-msg"></p>`,
+      <p id="mp-msg"></p>
+      <h3>Live-Rangliste</h3><div id="mp-top"></div>`,
     'p-result': () => `<p class="mp-net" id="mp-net"></p>
       <div id="mp-result"></div>
       <div class="model" role="group" aria-label="Ansicht">
@@ -3297,7 +3389,10 @@ if (typeof module !== 'undefined') module.exports = PARTS;
       set('mp-wait', esc(t)); set('mp-msg', esc(t));
       set('mp-chips', `<li class="done">${esc(mp.name)} (Sie)</li>` + chips(false));
     }
-    if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
+    if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') {
+      set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
+      set('mp-top', liveTop(rid));
+    }
     if (scr === 'p-design' || scr === 'h-play') {
       const r = st.view.res, alt = !!r && r.model !== st.model;   // alt: Ansicht im anderen Modell
       const moving = !!r && r.reason === 'mechanismus';
@@ -3373,7 +3468,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('m-solo').setAttribute('aria-pressed', String(!on));
     $('m-mp').setAttribute('aria-pressed', String(on));
     $('levels').hidden = on; $('solo-ui').hidden = on; $('mp-ui').hidden = !on;
-    if (on) { mpScr = ''; netStart(); mpRender(); return; }
+    if (on) { duel = null; duelRender(); mpScr = ''; netStart(); mpRender(); return; }
     leaveRoom(false);
     $('drawing').hidden = false; $('mp-board').hidden = true; $('timer').hidden = true; $('profiles').hidden = false; $('howto').hidden = false;
     // Einstellungen für allein wiederherstellen
@@ -3535,10 +3630,28 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   };
   $('b-retry').onclick = () => {
     if (st.busy) return;
-    st.animId++; st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design';
+    st.animId++; st.on = startOn(st.L); st.undo = []; st.probes = 1; st.phase = 'design'; st.practice = st.liveUtil;
     $('stamp').hidden = true; refresh();
   };
   $('b-eso').onclick = toggleEso;
+  const SHARE_INFO = $('share-msg').textContent;
+  $('b-duel').onclick = () => {
+    const sh = $('share');
+    sh.hidden = !sh.hidden;
+    if (sh.hidden) return;
+    const n = store.get('name');
+    if (!$('share-name').value && typeof n === 'string') $('share-name').value = n;
+    $('share-link').textContent = shareLink();
+    $('share-msg').textContent = SHARE_INFO;
+  };
+  $('share-name').oninput = () => { $('share-link').textContent = shareLink(); };
+  $('b-copy').onclick = () => {
+    const link = shareLink(), name = clean($('share-name').value, 16);
+    if (name) store.set('name', name);
+    $('share-link').textContent = link;
+    const done = ok => { $('share-msg').textContent = ok ? 'Link kopiert. Schicken Sie ihn an Ihre Kommilitonen.' : 'Bitte den Link oben markieren und kopieren.'; };
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => done(true), () => done(false)); else done(false);
+  };
   $('b-next').onclick = () => { if (!st.busy) loadLevel(Math.min(st.li + 1, RANDOM), newNr()); };   // nach den festen Bauteilen Zufall
 
   $('levels').innerHTML = LEVELS.map((d, i) => `<button type="button" data-i="${i}">${i + 1} ${d.name}</button>`).join('') +
@@ -3562,10 +3675,11 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   addEventListener('resize', () => { layout(); render(); });
   if (document.fonts) document.fonts.ready.then(() => { layout(); render(); });
 
-  // Links: Zufallsbauteil (#nr-…), eigenes Bauteil (#bau-…), Einstiege #zufall und #bauen; sonst false
+  // Links: Herausforderung (#duell~…), Zufallsbauteil (#nr-…), eigenes Bauteil (#bau-…), Einstiege #zufall und #bauen; sonst false
   function fromHash() {
-    const h = location.hash, nr = /^#nr-([1-9]\d{0,4})$/.exec(h), bau = /^#bau-(.+)$/.exec(h);
-    if (nr) loadLevel(RANDOM, +nr[1]);
+    const h = location.hash, d = parseDuel(h), nr = /^#nr-([1-9]\d{0,4})$/.exec(h), bau = /^#bau-(.+)$/.exec(h);
+    if (d) startDuel(d);
+    else if (nr) loadLevel(RANDOM, +nr[1]);
     else if (bau && PARTS.fromCode(bau[1])) loadLevel(CUSTOM, bau[1]);
     else if (h === '#zufall') loadLevel(RANDOM, newNr());
     else if (h === '#bauen') {

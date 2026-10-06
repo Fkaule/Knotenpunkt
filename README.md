@@ -27,11 +27,18 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - **Bemessung:** Die Lasten werden so skaliert, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, gerundet auf glatte Beträge (0,5 bis 200 kN); so liegt die Auslastung zwischen 42 und 64 %. Ein Bauteil gilt nur, wenn das volle Raster in beiden Modellen hält; jedes ist damit lösbar.
 - Ränder und Bemaßung ergeben sich bei diesen Bauteilen aus Lagern und Lasten, das Höhenmaß steht auf der freieren Seite.
 
+## Kommilitonen herausfordern
+
+- Nach einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist, erzeugt „Kommilitonen herausfordern“ einen Link mit Bauteil, Regeln (Rechenmodell, Eigengewicht, Knicken), Masse und Namen: `#duell~<Bauteil>~<t|f>~<Eigengewicht 0|1><Knicken 0|1>~<Masse mal 10>~<Name>`, Bauteil `f0` bis `f3` (fest), `z<Nummer>` (Zufall) oder `b<Code>` (Baukasten).
+- Wer den Link öffnet, spielt dasselbe Bauteil nach denselben Regeln, ohne Live-Auslastung, und versucht, leichter zu bauen. Oben im Bedienfeld steht das Ziel, nach dem Abgeben der Ausgang (gewonnen, Gleichstand, vorn liegt der andere); „Kommilitonen herausfordern“ schickt das eigene Ergebnis zurück.
+- Ein anderes Bauteil, ein anderes Rechenmodell, andere Einstellungen oder der Wettkampf beenden die Herausforderung. Gespeichert wird nichts; die Links zeigen auf die öffentliche Seite (lokal auf die eigene).
+
 ## Wettkampf
 
 - Läuft über einen eigenen Spielserver (`server.mjs`, Node und ws), der nur den Status aller Geräte verteilt (Presence); gerechnet wird in den Browsern. Auf GitHub Pages gibt es keinen Spielserver, dort ist der Wettkampf gesperrt.
 - Die Spielleitung eröffnet einen Raum mit vierstelligem Code (Link mit `#CODE`), wählt Bauteil (fest, Zufallsbauteil oder das zuletzt im Baukasten gespielte), Rechenmodell (Fachwerk oder Rahmen) und Zeit (3 bis 10 Minuten) und kann selbst mitspielen. Nach den festen Bauteilen schlägt sie Zufall vor.
 - Keine Probe-Rechnungen: Verformung und Auslastung sind die ganze Runde live zu sehen. Der Beamer zeigt dabei je Person die Masse des aktuellen Entwurfs, grün, wenn er gerade hält.
+- Live-Rangliste für alle, die mitspielen: die fünf leichtesten Entwürfe, die gerade halten, mit Platz (gleiche Masse, gleicher Platz), die eigene Zeile immer, dazu wie viele Entwürfe gerade halten; auch nach dem Abgeben.
 - Auflösung: Entwürfe nacheinander aufdecken, der leichteste zuletzt; große Ansicht je Entwurf, umschaltbar zwischen Fachwerk und Rahmen; der Algorithmus als Geisterzeile.
 - Eigengewicht und Knicken stellt die Spielleitung je Runde ein (Standard: ohne Eigengewicht, mit Knicken); die Rundenüberschrift nennt die Einstellungen.
 - Punkte nach Platz je Runde: Von n Entwürfen, die halten, bekommt der leichteste n Punkte, der schwerste 1; wer versagt, 0. Die Gesamtwertung zählt über alle Runden.

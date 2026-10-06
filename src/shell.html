@@ -70,6 +70,12 @@ canvas.grabbing { cursor: grabbing; }
 .legend i { display: block; width: clamp(18px, 3.4vw, 30px); height: 12px; }
 .legend li span { font-size: 10.5px; transform: translateX(-50%); font-variant-numeric: tabular-nums; }
 .legend .lg-t { font: 600 12px var(--f-body); color: var(--ink); }
+.duel { border: 2px solid var(--accent); padding: 8px 10px; font-size: 14.5px; line-height: 1.5; display: grid; gap: 4px; }
+.duel p { margin: 0; }
+#b-duel { grid-column: 1 / -1; }
+.share { display: grid; gap: 8px; }
+.share-link { margin: 0; font: 12px/1.4 var(--f-mono); color: var(--ink2); overflow-wrap: anywhere; user-select: all; }
+.share-msg { margin: 0; font-size: 13px; color: var(--ink2); }
 .legend ol.cats { flex-wrap: wrap; gap: 4px 12px; }   /* Kategorien: Farbe und Text nebeneinander */
 .legend ol.cats li { display: flex; align-items: center; gap: 5px; }
 .legend ol.cats i { width: 14px; }
@@ -168,6 +174,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 .rank .vl { font-family: var(--f-mono); }
 .rank li.me { font-weight: 700; }
 .rank li.ghost { color: var(--ink2); font-style: italic; }
+.rank li.gap { color: var(--ink2); }
 .rank li.out .vl { color: var(--bad); }
 .board .rank { font-size: clamp(15px, 1.7vw, 21px); }
 @media (prefers-reduced-motion: reduce) { .stamp.hit { animation: none; } }
@@ -253,6 +260,7 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
       </table>
 
       <div id="solo-ui" class="side">
+        <div class="duel" id="duel" hidden></div>
         <div class="model" id="model-row" role="group" aria-label="Rechenmodell">
           <span id="model-label">Rechnen als</span>
           <span class="tools">
@@ -291,8 +299,15 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
         </div>
         <div class="actions" id="act-result" hidden>
           <button class="btn primary" id="b-retry" type="button">Neuer Versuch</button>
+          <button class="btn" id="b-duel" type="button" hidden>Kommilitonen herausfordern</button>
           <button class="btn" id="b-eso" type="button">Lösung des Algorithmus</button>
           <button class="btn" id="b-next" type="button">Nächstes Bauteil</button>
+        </div>
+        <div class="share" id="share" hidden>
+          <label class="field">Ihr Name für die Herausforderung<input id="share-name" maxlength="16" autocomplete="nickname"></label>
+          <button class="btn" id="b-copy" type="button">Link kopieren</button>
+          <p class="share-link" id="share-link"></p>
+          <p class="share-msg" id="share-msg">Wer den Link öffnet, bekommt dasselbe Bauteil mit denselben Regeln und muss leichter bauen.</p>
         </div>
 
         <div class="verdict" id="verdict" aria-live="polite"></div>
