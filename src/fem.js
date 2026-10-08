@@ -1,12 +1,12 @@
 /* FE-Kern für Stabwerke: ebene Stäbe zwischen Rasterknoten, wahlweise als Fachwerk (Gelenkknoten, nur Normalkraft)
    oder als Rahmen (biegesteife Knoten, Euler-Bernoulli-Balken). Linear gerechnet, dazu eine Kinematikprüfung und eine
    Stabilitätsprüfung (elastische plus geometrische Steifigkeit). Band-Cholesky. Kein DOM. */
-const FEM = (() => {
+const FEM = (function make(cfg = {}) {   // cfg: eigener Werkstoff und eigene Querschnitte (E, RE, profiles), siehe free
   const GRID = 1000;                       // Rasterweite in mm
-  const E = 210000, RE = 235;              // Stahl S235, MPa
+  const E = cfg.E ?? 210000, RE = cfg.RE ?? 235;   // Stahl S235, MPa
   // Querschnitte: Quadratrohre nach EN 10219-2 (Eckradien außen 2t, innen t), A in mm², I in mm⁴, W in mm³, Masse in kg
   // je mm Stab. Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
-  const PROFILES = [[40, 3, 420.8, 93.2e3, 4.66e3], [60, 4, 854.8, 435.5e3, 14.52e3], [80, 5, 1435.6, 1314.4e3, 32.86e3]]
+  const PROFILES = cfg.profiles || [[40, 3, 420.8, 93.2e3, 4.66e3], [60, 4, 854.8, 435.5e3, 14.52e3], [80, 5, 1435.6, 1314.4e3, 32.86e3]]
     .map(([b, t, A, I, W]) => ({ name: `${b} × ${b} × ${t}`, b, t, A, I, W, kgmm: A * 7.85e-6 }));
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
@@ -64,6 +64,42 @@ const FEM = (() => {
     const total = bars.reduce((a, b) => a + b.len, 0);
     return { def, nx, ny, nN, ij, id, bars, nB, barAt, frozen, fix, fx, fy, supportNodes, loadNodes, nodeBars, domain, total,
       opts: { gravity: false, buckling: true } };
+  }
+
+  // Modell mit freien Knotenlagen zum Ansehen (nicht zum Bauen), etwa eine Nachrechnung. def: nodes { Name: [x, y] } in m,
+  // members [[Name, Name, Profil]], supports [{ kind, nodes: [Name], side, fix }], loads [{ node: Name, fx, fy }] in N,
+  // nsub Elemente je Stab (die Zwischenknoten sind Durchlaufstellen). Die Koordinaten werden so verschoben, dass die linke
+  // untere Ecke bei (0, 0) liegt. Ergebnis { L, on }: L wie bei level(), mit L.def in Koordinaten fürs Zeichnen (nx, ny:
+  // Ausdehnung), on: Profil je Element.
+  function free(def) {
+    const xs = Object.values(def.nodes), x0 = Math.min(...xs.map(p => p[0])), y0 = Math.min(...xs.map(p => p[1]));
+    const at = name => { const p = def.nodes[name]; return [p[0] - x0, p[1] - y0]; };
+    const ij = Object.keys(def.nodes).map(at), num = new Map(Object.keys(def.nodes).map((k, n) => [k, n]));
+    const key = (i, j) => Math.round(i * 1e6) + ',' + Math.round(j * 1e6), byKey = new Map(ij.map((q, n) => [key(...q), n]));
+    const id = (i, j) => byKey.get(key(i, j));
+    const bars = [], on = [], nsub = def.nsub || 1;
+    for (const [a, b, p] of def.members) {
+      const [i0, j0] = at(a), [i1, j1] = at(b);
+      let prev = num.get(a);
+      for (let s = 1; s <= nsub; s++) {
+        let q = num.get(b);
+        if (s < nsub) { q = ij.length; ij.push([i0 + (i1 - i0) * s / nsub, j0 + (j1 - j0) * s / nsub]); byKey.set(key(...ij[q]), q); }
+        const dx = (ij[q][0] - ij[prev][0]) * GRID, dy = (ij[q][1] - ij[prev][1]) * GRID, len = Math.hypot(dx, dy);
+        bars.push({ a: prev, b: q, p: ij[prev], q: ij[q], len, c: dx / len, s: dy / len });
+        on.push(p); prev = q;
+      }
+    }
+    const nN = ij.length, nB = bars.length, fix = new Uint8Array(nN), fx = new Float64Array(nN), fy = new Float64Array(nN);
+    const d = { ...def, nx: Math.max(...ij.map(q => q[0])), ny: Math.max(...ij.map(q => q[1])),
+      supports: def.supports.map(sp => ({ ...sp, nodes: sp.nodes.map(at) })), loads: def.loads.map(l => ({ ...l, node: at(l.node) })) };
+    const supportNodes = [], loadNodes = [];
+    for (const sp of def.supports) for (const n of sp.nodes) { fix[num.get(n)] |= sp.fix; supportNodes.push(num.get(n)); }
+    for (const l of def.loads) { const n = num.get(l.node); fx[n] += l.fx; fy[n] += l.fy; if (!loadNodes.includes(n)) loadNodes.push(n); }
+    const nodeBars = Array.from({ length: nN }, () => []);
+    bars.forEach((b, k) => { nodeBars[b.a].push(k); nodeBars[b.b].push(k); });
+    const L = { def: d, nx: d.nx, ny: d.ny, nN, ij, id, bars, nB, frozen: new Uint8Array(nB), fix, fx, fy, supportNodes, loadNodes,
+      nodeBars, domain: new Uint8Array(nB).fill(1), total: bars.reduce((a, b) => a + b.len, 0), opts: { ...def.opts } };
+    return { L, on: Uint8Array.from(on) };
   }
 
   // Stäbe, die über Knoten mit den Startknoten verbunden sind (nur Stäbe aus set)
@@ -614,6 +650,6 @@ const FEM = (() => {
   }
 
   return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, counting, bucklingLength,
-    analyze, localU, size, optimize };
+    analyze, localU, size, optimize, free, make };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;

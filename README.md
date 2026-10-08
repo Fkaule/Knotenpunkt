@@ -27,6 +27,12 @@ Spielen: https://fkaule.github.io/Knotenpunkt/
 - **Bemessung:** Die Lasten werden so skaliert, dass das volle Raster im mittleren Profil als Fachwerk zu etwa 55 % ausgelastet ist, gerundet auf glatte Beträge (0,5 bis 200 kN); so liegt die Auslastung zwischen 42 und 64 %. Ein Bauteil gilt nur, wenn das volle Raster in beiden Modellen hält; jedes ist damit lösbar.
 - Ränder und Bemaßung ergeben sich bei diesen Bauteilen aus Lagern und Lasten, das Höhenmaß steht auf der freieren Seite.
 
+## Modelle zum Ansehen
+
+- Link `#modell-Name` (etwa `#modell-strommast`): ein Tragwerk mit freien Knotenlagen, eigenem Werkstoff und eigenen Querschnitten, nur zum Ansehen, etwa eine Nachrechnung. Ansicht Fachwerk oder Rahmen, Werte, Verformung und kritischer Lastfaktor wie im Ergebnis; nichts zu bauen, keine Wertung.
+- Modelle stehen in `src/modelle.js` (Knoten, Stäbe, Lager, Lasten, Werkstoff). `FEM.make({ E, RE, profiles })` erzeugt dafür eine eigene Instanz des Rechenkerns, `FEM.free(def)` das Tragwerk mit mehreren Elementen je Stab. Die Rechnung der Bauteile bleibt unverändert.
+- Strommast: Vorderwand eines Gittermasts aus Vollrund 20 mm (E = 200 GPa, Re = 250 MPa), Füße eingespannt, mit Eigengewicht, Last F/2 = 3,24 kN an der Traversenspitze.
+
 ## Kommilitonen herausfordern
 
 - Nach einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist, erzeugt „Kommilitonen herausfordern“ einen Link (mit Live-Auslastung ist der Knopf ausgegraut, ein Hinweis sagt, wie es geht) mit Bauteil, Regeln (Rechenmodell, Eigengewicht, Knicken), Masse und Namen: `#duell~<Bauteil>~<t|f>~<Eigengewicht 0|1><Knicken 0|1>~<Masse mal 10>~<Name>`, Bauteil `f0` bis `f3` (fest), `z<Nummer>` (Zufall) oder `b<Code>` (Baukasten).

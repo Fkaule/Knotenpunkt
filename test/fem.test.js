@@ -323,3 +323,14 @@ test("Eigengewicht im Fachwerk: Ein gerader Stabzug gibt sein Gewicht an seine E
   for (const b of segs) near(r.N[L.barAt(...b)], -4000, 1e-9, "Stabkraft im ganzen Zug gleich");
 });
 
+
+test("Modell zum Ansehen: Strommast mit eigenem Werkstoff wie die Nachrechnung, der Kern der Bauteile bleibt", () => {
+  const M = require("../src/modelle.js").strommast, K = FEM.make(M.material);
+  const { L, on } = K.free({ ...M, loads: [{ node: "tR", fx: 0, fy: -500 }], opts: { gravity: false, buckling: true } });
+  const r = K.analyze(L, on, "frame");
+  assert.strictEqual(K.members(L, r.fe).length, 31, "31 Stäbe");
+  near(r.lambda, 3.403, 1e-3, "kritischer Lastfaktor bei F = 1 kN (Füße eingespannt)");
+  near(r.maxUtil, 1.002, 1e-3, "Eckstiel unten: Druckkraft je Euler-Knicklast");
+  near(r.ncr[r.maxBar], Math.PI ** 2 * 200000 * Math.PI * 20 ** 4 / 64 / 4031.1 ** 2, 1e-3, "Knicklast mit E = 200 GPa, Stablänge 4,03 m");
+  assert.strictEqual(FEM.E, 210000); assert.strictEqual(FEM.PROFILES.length, 3);   // die Instanz der Bauteile ist unverändert
+});

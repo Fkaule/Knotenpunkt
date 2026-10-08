@@ -252,8 +252,8 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
       <table class="titleblock" aria-label="Schriftfeld">
         <tbody>
           <tr><th>Benennung</th><td id="tb-name"></td></tr>
-          <tr><th>Werkstoff</th><td>S235, Re = 235 MPa</td></tr>
-          <tr><th>Profile</th><td>Quadratrohr, mm</td></tr>
+          <tr><th>Werkstoff</th><td id="tb-mat">S235, Re = 235 MPa</td></tr>
+          <tr><th>Profile</th><td id="tb-prof">Quadratrohr, mm</td></tr>
           <tr><th>Belastung</th><td id="tb-load"></td></tr>
           <tr><th>Abmessungen</th><td id="tb-size"></td></tr>
           <tr><th>Stäbe</th><td id="tb-bars"></td></tr>
@@ -368,12 +368,12 @@ summary:focus-visible, input:focus-visible, select:focus-visible { outline: 3px 
 /* FE-Kern für Stabwerke: ebene Stäbe zwischen Rasterknoten, wahlweise als Fachwerk (Gelenkknoten, nur Normalkraft)
    oder als Rahmen (biegesteife Knoten, Euler-Bernoulli-Balken). Linear gerechnet, dazu eine Kinematikprüfung und eine
    Stabilitätsprüfung (elastische plus geometrische Steifigkeit). Band-Cholesky. Kein DOM. */
-const FEM = (() => {
+const FEM = (function make(cfg = {}) {   // cfg: eigener Werkstoff und eigene Querschnitte (E, RE, profiles), siehe free
   const GRID = 1000;                       // Rasterweite in mm
-  const E = 210000, RE = 235;              // Stahl S235, MPa
+  const E = cfg.E ?? 210000, RE = cfg.RE ?? 235;   // Stahl S235, MPa
   // Querschnitte: Quadratrohre nach EN 10219-2 (Eckradien außen 2t, innen t), A in mm², I in mm⁴, W in mm³, Masse in kg
   // je mm Stab. Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
-  const PROFILES = [[40, 3, 420.8, 93.2e3, 4.66e3], [60, 4, 854.8, 435.5e3, 14.52e3], [80, 5, 1435.6, 1314.4e3, 32.86e3]]
+  const PROFILES = cfg.profiles || [[40, 3, 420.8, 93.2e3, 4.66e3], [60, 4, 854.8, 435.5e3, 14.52e3], [80, 5, 1435.6, 1314.4e3, 32.86e3]]
     .map(([b, t, A, I, W]) => ({ name: `${b} × ${b} × ${t}`, b, t, A, I, W, kgmm: A * 7.85e-6 }));
   const prof = x => PROFILES[x - 1];
   const ncr = (p, Lk) => Math.PI ** 2 * E * p.I / (Lk * Lk);   // Euler, beidseitig gelenkig
@@ -431,6 +431,42 @@ const FEM = (() => {
     const total = bars.reduce((a, b) => a + b.len, 0);
     return { def, nx, ny, nN, ij, id, bars, nB, barAt, frozen, fix, fx, fy, supportNodes, loadNodes, nodeBars, domain, total,
       opts: { gravity: false, buckling: true } };
+  }
+
+  // Modell mit freien Knotenlagen zum Ansehen (nicht zum Bauen), etwa eine Nachrechnung. def: nodes { Name: [x, y] } in m,
+  // members [[Name, Name, Profil]], supports [{ kind, nodes: [Name], side, fix }], loads [{ node: Name, fx, fy }] in N,
+  // nsub Elemente je Stab (die Zwischenknoten sind Durchlaufstellen). Die Koordinaten werden so verschoben, dass die linke
+  // untere Ecke bei (0, 0) liegt. Ergebnis { L, on }: L wie bei level(), mit L.def in Koordinaten fürs Zeichnen (nx, ny:
+  // Ausdehnung), on: Profil je Element.
+  function free(def) {
+    const xs = Object.values(def.nodes), x0 = Math.min(...xs.map(p => p[0])), y0 = Math.min(...xs.map(p => p[1]));
+    const at = name => { const p = def.nodes[name]; return [p[0] - x0, p[1] - y0]; };
+    const ij = Object.keys(def.nodes).map(at), num = new Map(Object.keys(def.nodes).map((k, n) => [k, n]));
+    const key = (i, j) => Math.round(i * 1e6) + ',' + Math.round(j * 1e6), byKey = new Map(ij.map((q, n) => [key(...q), n]));
+    const id = (i, j) => byKey.get(key(i, j));
+    const bars = [], on = [], nsub = def.nsub || 1;
+    for (const [a, b, p] of def.members) {
+      const [i0, j0] = at(a), [i1, j1] = at(b);
+      let prev = num.get(a);
+      for (let s = 1; s <= nsub; s++) {
+        let q = num.get(b);
+        if (s < nsub) { q = ij.length; ij.push([i0 + (i1 - i0) * s / nsub, j0 + (j1 - j0) * s / nsub]); byKey.set(key(...ij[q]), q); }
+        const dx = (ij[q][0] - ij[prev][0]) * GRID, dy = (ij[q][1] - ij[prev][1]) * GRID, len = Math.hypot(dx, dy);
+        bars.push({ a: prev, b: q, p: ij[prev], q: ij[q], len, c: dx / len, s: dy / len });
+        on.push(p); prev = q;
+      }
+    }
+    const nN = ij.length, nB = bars.length, fix = new Uint8Array(nN), fx = new Float64Array(nN), fy = new Float64Array(nN);
+    const d = { ...def, nx: Math.max(...ij.map(q => q[0])), ny: Math.max(...ij.map(q => q[1])),
+      supports: def.supports.map(sp => ({ ...sp, nodes: sp.nodes.map(at) })), loads: def.loads.map(l => ({ ...l, node: at(l.node) })) };
+    const supportNodes = [], loadNodes = [];
+    for (const sp of def.supports) for (const n of sp.nodes) { fix[num.get(n)] |= sp.fix; supportNodes.push(num.get(n)); }
+    for (const l of def.loads) { const n = num.get(l.node); fx[n] += l.fx; fy[n] += l.fy; if (!loadNodes.includes(n)) loadNodes.push(n); }
+    const nodeBars = Array.from({ length: nN }, () => []);
+    bars.forEach((b, k) => { nodeBars[b.a].push(k); nodeBars[b.b].push(k); });
+    const L = { def: d, nx: d.nx, ny: d.ny, nN, ij, id, bars, nB, frozen: new Uint8Array(nB), fix, fx, fy, supportNodes, loadNodes,
+      nodeBars, domain: new Uint8Array(nB).fill(1), total: bars.reduce((a, b) => a + b.len, 0), opts: { ...def.opts } };
+    return { L, on: Uint8Array.from(on) };
   }
 
   // Stäbe, die über Knoten mit den Startknoten verbunden sind (nur Stäbe aus set)
@@ -981,7 +1017,7 @@ const FEM = (() => {
   }
 
   return { GRID, E, RE, PROFILES, ncr, barUtil, level, reach, attached, length, mass, carrying, passNodes, members, counting, bucklingLength,
-    analyze, localU, size, optimize };
+    analyze, localU, size, optimize, free, make };
 })();
 if (typeof module !== 'undefined') module.exports = FEM;
 
@@ -1327,11 +1363,42 @@ const PARTS = (FEM => {
 })(typeof module !== 'undefined' ? require('./fem.js') : FEM);
 if (typeof module !== 'undefined') module.exports = PARTS;
 
+/* Modelle zum Ansehen (Link #modell-Name): Nachrechnungen mit freien Knotenlagen, eigenem Werkstoff und eigenen
+   Querschnitten. Format siehe FEM.free; material geht an FEM.make. Fürs Zeichnen wie bei den festen Bauteilen margin und dim. */
+const MODELLE = (() => {
+  // Strommast nach einem Ansys-Modell aus der Nichtlinearen Strukturmechanik (2026): Vorderwand als halber 3D-Mast
+  // (symmetrisch, trägt F/2), Eckstiele gerade von ±1,25 m zur Spitze bei 10 m, Kreuzungen der Diagonalen verbunden.
+  // Profil 2 trägt zusätzlich das Gewicht der Seitenwand (gleicher Querschnitt, doppelte Masse).
+  const leg = z => 1.25 * (1 - z / 10), d = 20, A = Math.PI * d * d / 4;
+  const rund = (b, kg) => ({ name: 'Vollrund 20 mm', b, A, I: Math.PI * d ** 4 / 64, W: Math.PI * d ** 3 / 32, kgmm: kg * A * 7.85e-6, w: 1 });   // w: Strichstärke wie Profil 1
+  const nodes = { top: [0, 10], tL: [-3, 7], tR: [3, 7], mL: [-1.6875, 7.7], mR: [1.6875, 7.7], k1: [0, 2.5], k2: [0, 6], k3: [0, 8] };
+  for (const z of [0, 4, 7, 8.5]) { nodes['L' + z] = [-leg(z), z]; nodes['R' + z] = [leg(z), z]; }
+  const S = 1, W = 2;   // Eckstiele und Traverse, Wandverband
+  const strommast = {
+    name: 'Strommast', note: 'Nachrechnung eines Ansys-Modells aus der Nichtlinearen Strukturmechanik: Vorderwand des Gittermasts, Vollrund 20 mm, E = 200 GPa, Re = 250 MPa, Füße eingespannt, mit Eigengewicht. Die Vorderwand trägt die Hälfte der Last an der Traversenspitze (Traglast in Ansys 6,48 kN, hier F/2 = 3,24 kN).',
+    material: { E: 200000, RE: 250, profiles: [rund('Ø20', 1), rund('Ø20 Verband', 2)] },
+    nodes, nsub: 8, opts: { gravity: true, buckling: true }, model: 'frame',
+    members: [
+      ['L0', 'L4', S], ['L4', 'L7', S], ['L7', 'L8.5', S], ['L8.5', 'top', S], ['R0', 'R4', S], ['R4', 'R7', S], ['R7', 'R8.5', S], ['R8.5', 'top', S],
+      ['L4', 'R4', W], ['L7', 'R7', W], ['L8.5', 'R8.5', W],
+      ['L0', 'k1', W], ['k1', 'R4', W], ['R0', 'k1', W], ['k1', 'L4', W], ['L4', 'k2', W], ['k2', 'R7', W],
+      ['R4', 'k2', W], ['k2', 'L7', W], ['L7', 'k3', W], ['k3', 'R8.5', W], ['R7', 'k3', W], ['k3', 'L8.5', W],
+      ['tL', 'L7', S], ['tL', 'mL', S], ['mL', 'L8.5', S], ['mL', 'L7', S], ['tR', 'R7', S], ['tR', 'mR', S], ['mR', 'R8.5', S], ['mR', 'R7', S],
+    ],
+    supports: [{ kind: 'wand', nodes: ['L0'], side: 'bottom', fix: 7 }, { kind: 'wand', nodes: ['R0'], side: 'bottom', fix: 7 }],
+    loads: [{ node: 'tR', fx: 0, fy: -3240 }],
+    margin: [0.5, 1.2, 1.9, 1.0], dim: [1.45, 0.7],
+  };
+  return { strommast };
+})();
+if (typeof module !== 'undefined') module.exports = MODELLE;
+
 </script>
 <script>
 /* Spiel: Stabwerk zeichnen, als Fachwerk oder Rahmen rechnen, aufdecken, Gegner. Zeichnet auf ein Canvas im Stil einer
    technischen Zeichnung. */
-(() => {
+(FEM0 => {
+  let FEM = FEM0;   // in der Ansicht eines Modells eine Instanz mit dessen Werkstoff und Querschnitten (siehe openModel)
   const { GRID, PROFILES } = FEM;
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d'), wrap = $('wrap');
@@ -1401,7 +1468,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     const ms = FEM.members(st.L, on), n = [0, 0, 0];
     let mixed = 0;
     for (const m of ms) if (m.every(k => on[k] === on[m[0]])) n[on[m[0]] - 1]++; else mixed++;
-    const parts = n.map((c, p) => c ? `${c} × ${PROFILES[p].b}` : '').filter(Boolean);
+    const parts = n.map((c, p) => c ? `${c} × ${FEM.PROFILES[p].b}` : '').filter(Boolean);
     if (mixed) parts.push(`${mixed} gemischt`);
     return { count: ms.length, text: parts.length ? parts.join(', ') : 'keine' };
   }
@@ -1519,7 +1586,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   }
   const P = ([i, j]) => [G.ox + i * G.s, G.oy - j * G.s];   // Rasterpunkt in Pixel
   const bw = () => Math.max(2.5, G.s * 0.055);
-  const bwOf = p => bw() * [1, 1.5, 2.05][p - 1];          // Strichstärke je Profil
+  const bwOf = p => bw() * (FEM.PROFILES[p - 1].w || [1, 1.5, 2.05][p - 1]);   // Strichstärke je Profil (Modelle: w)
   // Knotenlage in Pixel mit überhöhter Verschiebung (scale: Überhöhung, u in mm)
   const nodeXY = (r, n, scale) => {
     const [x, y] = P(st.L.ij[n]);
@@ -1908,7 +1975,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     ctx.restore();
   }
   // maßgebend ist Knicken, nicht Fließen?
-  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k], st.buck)[1];
+  const knickt = (r, k) => r.N[k] < 0 && FEM.barUtil(FEM.PROFILES[r.on[k] - 1], r.N[k], Math.max(Math.abs(r.M[2 * k]), Math.abs(r.M[2 * k + 1])), r.Lk[k], st.buck)[1];
 
   // Lagersymbole wie in der Technischen Mechanik
   const OUT = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1] };
@@ -2054,38 +2121,42 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   }
   const legend = on => { $('legend').hidden = !on; $('werte-row').hidden = !on; };   // Werte-Auswahl nur, wenn Farben zu sehen sind
 
+  const TB_MAT = $('tb-mat').textContent, TB_PROF = $('tb-prof').textContent;   // Schriftfeld der Bauteile; Modelle haben eigene
   function panel() {
     if (st.phase === 'edit') return edPanel();
     const L = st.L, d = st.def, e = esoNow(), eso = st.phase === 'eso' && e;
     const on = eso ? e.on : st.on, conn = eso ? e.res.conn : st.conn;
     $('tb-name').textContent = partName(d);
-    $('tb-load').textContent = loadText(d) + (st.grav ? ' + Eigengewicht' : '');
-    $('tb-size').textContent = `${d.nx} × ${d.ny} m, Raster 1 m`;
+    $('tb-load').textContent = loadText(d) + (L.opts.gravity ? ' + Eigengewicht' : '');
+    $('tb-mat').textContent = st.phase === 'view' ? `E = ${fmt(FEM.E / 1000)} GPa, Re = ${fmt(FEM.RE)} MPa` : TB_MAT;
+    $('tb-prof').textContent = st.phase === 'view' ? [...new Set(FEM.PROFILES.map(q => q.name))].join(', ') : TB_PROF;
+    $('tb-size').textContent = st.phase === 'view' ? `${fmt(d.nx, d.nx % 1 ? 1 : 0)} × ${fmt(d.ny, d.ny % 1 ? 1 : 0)} m, freie Geometrie` : `${d.nx} × ${d.ny} m, Raster 1 m`;
     const b = barsOf(inSet(on, conn));
     $('tb-bars').textContent = `${b.count}: ${b.text}`;
     const m = st.view && st.view.res ? st.view.res.model : mp.on && st.look ? st.look : st.model;   // das gezeigte Modell
     $('tb-count').textContent = countText(counted(on, conn, m), m);
     $('tb-mass').textContent = `${fmt(kg(on, conn))} kg`;
-    $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.probes ? `${st.probes} übrig` : 'verbraucht';
+    $('tb-probe').textContent = mp.on ? 'entfällt, alles live' : st.phase === 'view' ? 'entfällt, nur Ansicht' : st.probes ? `${st.probes} übrig` : 'verbraucht';
     const rid = mp.role === 'host' ? mp.g.rid : mp.rid;
     $('tb-sheet').textContent = mp.on ? (rid ? `Runde ${rid}` : 'Warteraum')
-      : st.li === RANDOM ? 'Zufallsbauteil' : st.li === CUSTOM ? 'Baukasten' : `${st.li + 1} von ${LEVELS.length}`;
+      : st.phase === 'view' ? 'Modell zum Ansehen' : st.li === RANDOM ? 'Zufallsbauteil' : st.li === CUSTOM ? 'Baukasten' : `${st.li + 1} von ${LEVELS.length}`;
   }
 
   function controls() {
-    const design = st.phase === 'design' || st.phase === 'probe', edit = st.phase === 'edit';
+    const design = st.phase === 'design' || st.phase === 'probe', edit = st.phase === 'edit', view = st.phase === 'view';
     $('act-design').hidden = !design;
-    $('act-result').hidden = design || edit;
+    $('act-result').hidden = design || edit || view;
     // Baukasten: Werkzeuge, Spielen, dazu Richtung und Betrag der gewählten Last; Profile, Modell und Live-Ansicht ruhen
     $('act-edit').hidden = $('etools').hidden = $('howto-edit').hidden = !edit;
     $('ledit').hidden = !(edit && ed.tool === 'last' && ed.loads.length);
-    $('model-row').hidden = $('live-row').hidden = edit;
+    $('model-row').hidden = edit;
+    $('live-row').hidden = edit || view;
     $('lv-util').hidden = !!duel;   // in einer Herausforderung keine Live-Auslastung
     // herausfordern nur mit einem Ergebnis, das hält und ohne Live-Auslastung entstanden ist (sonst ausgegraut mit Hinweis)
     $('b-duel').hidden = mp.on || st.phase !== 'result' || mine10() < 0;
     $('duel-hint').hidden = $('b-duel').hidden || !st.practice;
     if (st.phase !== 'result') $('share').hidden = true;
-    if (!mp.on) $('profiles').hidden = $('howto').hidden = edit;
+    if (!mp.on) $('profiles').hidden = $('howto').hidden = edit || view;
     for (const b of document.querySelectorAll('.actions .btn')) b.disabled = st.busy;
     if (!st.busy) {
       $('b-probe').disabled = !st.probes || st.liveUtil;
@@ -2100,7 +2171,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     for (const [id, on] of [['lv-def', st.liveDef], ['lv-util', st.liveUtil], ['set-grav', st.grav], ['set-buck', st.buck]]) {
       $(id).setAttribute('aria-pressed', String(on)); $(id).disabled = !design || st.busy;
     }
-    $('set-row').hidden = edit;
+    $('set-row').hidden = edit || view;   // in der Ansicht gelten die Einstellungen des Modells
     // im Entwurf: welches Modell gewertet wird; nach dem Abgeben: welches Modell gezeigt wird
     const m = design ? st.model : st.shown;
     $('model-label').textContent = design ? 'Rechnen als' : 'Ansicht';
@@ -2147,7 +2218,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
 
   // i: festes Bauteil, RANDOM mit Nummer oder CUSTOM mit Code als arg
   function loadLevel(i, arg) {
-    st.animId++;
+    st.animId++; FEM = FEM0;
     let def = i === RANDOM ? PARTS.generate(arg) : i === CUSTOM ? PARTS.fromCode(arg) : LEVELS[i];
     if (!def) { i = 0; def = LEVELS[0]; }
     st.li = i; st.def = def; st.key = def.nr ? 'z' + def.nr : def.code ? 'b' + def.code : String(i); st.L = FEM.level(def); applyOpts();
@@ -2157,7 +2228,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     $('stamp').hidden = true;
     document.querySelectorAll('#levels button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
     // Zufalls- und eigene Bauteile im Link festhalten, damit man sie wiederholen oder weitergeben kann (Raumcodes bleiben)
-    if (!mp.on && !duel && (i >= RANDOM || /^#(nr|bau|duell)[-~]/.test(location.hash))) {
+    if (!mp.on && !duel && (i >= RANDOM || /^#(nr|bau|duell|modell)[-~]/.test(location.hash))) {
       try { history.replaceState(null, '', def.nr ? '#nr-' + def.nr : def.code ? '#bau-' + def.code : location.pathname + location.search); } catch {}
     }
     layout(); refresh(); startEso();
@@ -2211,7 +2282,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   const stampLow = () => { const d = st.def; return d.margin ? d.stamp === 'unten' : inDomain(d.nx - 0.5, d.ny - 0.5) && !inDomain(d.nx - 0.5, 0.5); };
   function stamp(ok) {
     const el = $('stamp');
-    if (!el.hidden) return;
+    if (!el.hidden || st.phase === 'view') return;
     el.textContent = ok ? 'HÄLT' : 'BRUCH';
     el.className = 'stamp ' + (ok ? 'ok' : 'bad') + (stampLow() ? ' unten' : '') + (reduce ? '' : ' hit');
     el.hidden = false;
@@ -2237,6 +2308,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
       const keep = FEM.attached(L, Uint8Array.from(on, (x, k) => x && r.conn[k] && !r.fail[k] ? x : 0));
       fall = Uint8Array.from(on, (x, k) => r.conn[k] && (!keep[k] || r.fail[k]) ? 1 : 0);
     } else if (mech) fall = Uint8Array.from(r.fe);
+    if (st.phase === 'view') fall = null;   // in der Ansicht bleibt alles stehen
     let scale = 0;
     if (stress) scale = niceScale(r);
     if (mech) { const m = maxDisp(r); scale = m ? 0.45 * GRID / m : 0; }
@@ -2283,6 +2355,30 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     }
     $('verdict').innerHTML = h;
     duelRender();
+  }
+
+  // ---------- Modelle zum Ansehen ----------
+  // Link #modell-Name: Nachrechnung mit freien Knotenlagen, eigenem Werkstoff und eigenen Querschnitten (MODELLE). Nichts zu
+  // bauen und nichts zu werten: beide Rechenmodelle, umschaltbar bei „Ansicht“, dazu die Werte wie im Ergebnis.
+  function openModel(name) {
+    const def = MODELLE[name];
+    st.animId++; st.esoRun = null;
+    FEM = FEM0.make(def.material);
+    const { L, on } = FEM.free(def);
+    Object.assign(st, { li: -1, def: L.def, L, key: 'm-' + name, on, undo: [], phase: 'view', busy: false, drag: null, hover: null,
+      shown: def.model || st.model, res: { truss: FEM.analyze(L, on, 'truss'), frame: FEM.analyze(L, on, 'frame') } });
+    st.conn = st.res[st.shown].conn; st.pass = st.res[st.shown].pass;
+    $('stamp').hidden = true;
+    document.querySelectorAll('#levels button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    layout();
+    reveal(st.res[st.shown], on, false, viewVerdict);
+  }
+  function viewVerdict() {
+    const m = st.shown, r = st.res[m], o = st.res[other(m)];
+    $('verdict').innerHTML = `<p>${st.def.note}</p><p>Als ${NAME[m]}: ${statusText(r)}</p>` +
+      `<p>Als ${NAME[other(m)]}: ${statusText(o)} Oben bei „Ansicht“ schalten Sie um.</p>` +
+      '<p>Der Nachweis je Stab rechnet jeden Druckstab beidseitig gelenkig (Knicklänge gleich Stablänge). Der kritische Lastfaktor ' +
+      'unter der Zeichnung gilt für das ganze Tragwerk mit seinen Anschlüssen.</p>';
   }
 
   // ---------- Herausforderung ----------
@@ -2347,7 +2443,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
     if (m === st.shown) return;
     st.shown = m;
     if (st.phase === 'eso') return showEso();
-    reveal(st.res[m], st.on, false, () => verdict());
+    reveal(st.res[m], st.on, false, st.phase === 'view' ? viewVerdict : () => verdict());
   }
   // Live-Ansicht: Verformung und Auslastung schalten unabhängig voneinander
   function toggleLive(what) {
@@ -2459,6 +2555,7 @@ if (typeof module !== 'undefined') module.exports = PARTS;
 
   // Erster Aufruf oder von einem anderen Bauteil aus: dieses Bauteil zum Abwandeln übernehmen
   function openEditor() {
+    if (st.phase === 'view') loadLevel(2);   // aus der Ansicht eines Modells: Vorlage Kragarm wie bei #bauen
     st.animId++; st.esoRun = null;   // der Gegner ruht beim Bauen
     if (!ed.cells || st.li !== CUSTOM || (st.def.code && st.def.code !== ed.code)) edFrom(st.def);
     Object.assign(st, { li: CUSTOM, phase: 'edit', busy: false, drag: null, hover: null });
@@ -3727,8 +3824,9 @@ if (typeof module !== 'undefined') module.exports = PARTS;
 
   // Links: Herausforderung (#duell~…), Zufallsbauteil (#nr-…), eigenes Bauteil (#bau-…), Einstiege #zufall und #bauen; sonst false
   function fromHash() {
-    const h = location.hash, d = parseDuel(h), nr = /^#nr-([1-9]\d{0,4})$/.exec(h), bau = /^#bau-(.+)$/.exec(h);
+    const h = location.hash, d = parseDuel(h), nr = /^#nr-([1-9]\d{0,4})$/.exec(h), bau = /^#bau-(.+)$/.exec(h), mod = /^#modell-(\w+)$/.exec(h);
     if (d) startDuel(d);
+    else if (mod && MODELLE[mod[1]]) openModel(mod[1]);
     else if (nr) loadLevel(RANDOM, +nr[1]);
     else if (bau && PARTS.fromCode(bau[1])) loadLevel(CUSTOM, bau[1]);
     else if (h === '#zufall') loadLevel(RANDOM, newNr());
@@ -3742,6 +3840,6 @@ if (typeof module !== 'undefined') module.exports = PARTS;
   if (!fromHash()) loadLevel(0);
   if (/^#[A-Za-z0-9]{4}$/.test(location.hash)) setMode(true);   // Einladungslink mit Raumcode
   addEventListener('hashchange', () => { if (!mp.on && !st.busy) fromHash(); });   // Link in ein offenes Spiel eingefügt
-})();
+})(FEM);
 
 </script>
