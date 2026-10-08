@@ -11,6 +11,13 @@ const LEVELS = (() => {
     supports: [{ kind: 'wand', nodes: range(0, 2).map(i => [i, 0]), side: 'bottom', fix: 7 }],
     loads: [{ node: [7, 5], fx: 0, fy: -38000 }] };
   for (let x = 2; x < 7; x++) for (let y = 0; y < 5; y++) kran.cut.push([x, y]);
+  // Strommast: Schaft 2 m breit und 10 m hoch, Traverse bei 6 bis 7 m mit 2 m Ausladung, an beiden Spitzen hängt ein Leiterseil,
+  // oben das Erdseil (halbe Last; ohne Last an der Spitze baut niemand den Schaft über der Traverse)
+  const strommast = { name: 'Strommast', note: 'Unten zwei Festlager, an den Spitzen der Traverse hängen die Leiterseile, oben das Erdseil.',
+    nx: 6, ny: 10, cut: [], margin: [0.5, 1.2, 1.3, 1.2], dim: [0.95, 0.75],
+    supports: [{ kind: 'fest', nodes: [[2, 0], [4, 0]], side: 'bottom', fix: 3 }],
+    loads: [{ node: [0, 6], fx: 0, fy: -70000 }, { node: [3, 10], fx: 0, fy: -35000 }, { node: [6, 6], fx: 0, fy: -70000 }] };
+  for (let x = 0; x < 6; x++) for (let y = 0; y < 10; y++) if ((x < 2 || x > 3) && y !== 6) strommast.cut.push([x, y]);
   return [
     { name: 'Tor', note: 'Stützen und Riegel sind vorgegeben, unten gelenkig gelagert, der Wind drückt oben links. Als Fachwerk ist das leere Tor beweglich, als Rahmen trägt es über Biegung, wenn die Profile dick genug sind.',
       nx: 3, ny: 3, margin: [0.6, 1.2, 1.3, 0.6], dim: [0.95, 0.75], dimSide: 'right',
@@ -27,6 +34,7 @@ const LEVELS = (() => {
       supports: [{ kind: 'wand', nodes: range(0, 4).map(j => [0, j]), side: 'left', fix: 7 }],
       loads: [{ node: [8, 0], fx: 0, fy: -90000 }] },
     kran,
+    strommast,
   ];
 })();
 if (typeof module !== 'undefined') module.exports = LEVELS;
