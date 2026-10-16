@@ -349,3 +349,15 @@ test("Modell zum Ansehen: Fahrradrahmen in dm, Lagerkräfte wie von Hand, Fachwe
   for (const m of K.members(L, t.fe)) near(r.N[m[0]], t.N[m[0]], 0.01, "Stabkraft im Rahmen wie im Fachwerk (auf 1 %)");
   assert.strictEqual(FEM.GRID, 1000);   // die Instanz der Bauteile ist unverändert
 });
+
+test("Modell zum Ansehen: Fahrradrahmen mit Sattelstütze, Last neben dem Knoten, als Rahmen Biegung, als Fachwerk beweglich", () => {
+  const M = require("../src/modelle.js").fahrradsattel, K = FEM.make(M.material), { L, on } = K.free(M);
+  const r = K.analyze(L, on, "frame"), R = new Map(r.react.map(([n, , fy]) => [n, fy]));
+  assert.ok(r.ok, "hält als Rahmen"); assert.strictEqual(K.members(L, r.fe).length, 6, "6 Stäbe");
+  const x = n => M.nodes[n][0] * 100, vorn = 800 * (x("SA") - x("RA")) / (x("H") - x("RA"));
+  near(R.get(L.supportNodes[1]), vorn, 1e-9, "Steuerrohr aus dem Momentengleichgewicht um die Hinterachse");
+  near(R.get(L.supportNodes[0]), 800 - vorn, 1e-9, "Hinterachse");
+  const st = L.bars.findIndex((b, k) => on[k] === 5 && b.a === Object.keys(M.nodes).indexOf("ST"));   // Stütze am Sitzknoten
+  near(Math.abs(r.M[2 * st]), 800 * (x("ST") - x("SA")), 1e-6, "Einspannmoment der Stütze: Last mal waagrechter Hebel");
+  assert.strictEqual(K.analyze(L, on, "truss").reason, "mechanismus", "als Fachwerk kippt die Stütze um den Sitzknoten");
+});

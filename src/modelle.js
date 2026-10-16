@@ -28,8 +28,9 @@ const MODELLE = (() => {
   // zur Mitte des Steuerrohrs, Kettenstreben 410 mm, Tretlager 70 mm unter der Hinterachse), vereinfacht wie in der TM: das
   // Steuerrohr ist ein Knoten in seiner Mitte, dort das Loslager (ohne Gabel und Vorderrad). So sind es zwei Dreiecke, als
   // Fachwerk statisch bestimmt. Knotenlagen in dm (grid 100 mm), damit Lager und Pfeile zur Größe passen. Ketten- und
-  // Sitzstreben sind Paare: in der Ebene ein Stab mit doppeltem Querschnitt. Rohre ohne Konifizierung.
-  const fahrrad = (() => {
+  // Sitzstreben sind Paare: in der Ebene ein Stab mit doppeltem Querschnitt. Rohre ohne Konifizierung. stuetze: dazu die
+  // Sattelstütze, 200 mm in Richtung Sitzrohr über dem Sitzknoten, die Last oben darauf statt am Knoten.
+  function rad(stuetze) {
     const z = x => String(x).replace('.', ',');
     const rohr = (D, t, w, paar) => {
       const di = D - 2 * t, A = Math.PI / 4 * (D * D - di * di), I = Math.PI / 64 * (D ** 4 - di ** 4), n = paar ? 2 : 1;
@@ -38,16 +39,17 @@ const MODELLE = (() => {
     };
     const deg = Math.PI / 180, sitz = 73.5 * deg, lenk = 73 * deg, dm = (x, y) => [x * 10, y * 10];
     const ST = [-0.55 / Math.tan(sitz), 0.55], H = [0.39 + 0.07 * Math.cos(lenk), 0.55 - 0.07 * Math.sin(lenk)];   // Steuerrohr 140 mm, Mitte
-    const RA = [-Math.sqrt(0.41 ** 2 - 0.07 ** 2), 0.07];
-    const U = 1, O = 2, K = 3, S = 4;   // Sitz- und Unterrohr, Oberrohr, Ketten-, Sitzstreben
-    return {
-      name: 'Fahrradrahmen', note: 'Klassischer Diamantrahmen aus Stahl (CrMo, angenommen E = 210 GPa, Re = 600 MPa, Rohre ohne ' +
-        'Konifizierung), Größe etwa 56 cm, vereinfacht wie in der TM: Das Steuerrohr ist ein Knoten, dort sitzt das Loslager. ' +
-        'Hinterachse Festlager. Fahrer etwa 80 kg (800 N) ganz auf dem Sattel, statisch, am Sitzknoten. Ketten- und Sitzstreben ' +
-        'sind Paare, in der Ebene zusammengefasst. Zwei Dreiecke: als Fachwerk statisch bestimmt, als Rahmen mit Biegung in den ' +
-        'steifen Knoten.',
-      material: { E: 210000, RE: 600, grid: 100,
-        profiles: [rohr(28.6, 0.8, 1.4), rohr(25.4, 0.8, 1.25), rohr(22, 0.8, 1.1, 1), rohr(16, 0.8, 0.8, 1)] },
+    const RA = [-Math.sqrt(0.41 ** 2 - 0.07 ** 2), 0.07], SA = [ST[0] - 0.2 * Math.cos(sitz), ST[1] + 0.2 * Math.sin(sitz)];
+    const U = 1, O = 2, K = 3, S = 4, P = 5;   // Sitz- und Unterrohr, Oberrohr, Ketten-, Sitzstreben, Sattelstütze
+    const profiles = [rohr(28.6, 0.8, 1.4), rohr(25.4, 0.8, 1.25), rohr(22, 0.8, 1.1, 1), rohr(16, 0.8, 0.8, 1)];
+    const rahmen = 'Diamantrahmen aus Stahl (CrMo, angenommen E = 210 GPa, Re = 600 MPa, Rohre ohne Konifizierung), Größe etwa ' +
+      '56 cm, vereinfacht wie in der TM: Das Steuerrohr ist ein Knoten, dort sitzt das Loslager. Hinterachse Festlager. Ketten- ' +
+      'und Sitzstreben sind Paare, in der Ebene zusammengefasst. Fahrer etwa 80 kg (800 N) ganz auf dem Sattel, statisch, ';
+    const def = {
+      name: 'Fahrradrahmen', note: 'Klassischer ' + rahmen + 'am Sitzknoten. Die Last greift am Knoten an, der Rahmen besteht ' +
+        'aus zwei Dreiecken: Als Fachwerk ist er statisch bestimmt, als Rahmen kommt nur wenig Biegung dazu (Nebenspannungen), die ' +
+        'Stabkräfte sind fast gleich. Mit der Last oben auf der Sattelstütze: Link #modell-fahrradsattel.',
+      material: { E: 210000, RE: 600, grid: 100, profiles },
       nodes: { BB: [0, 0], RA: dm(...RA), ST: dm(...ST), H: dm(...H) },
       nsub: 6, opts: { gravity: false, buckling: true }, model: 'truss',
       members: [['BB', 'ST', U], ['BB', 'H', U], ['ST', 'H', O], ['RA', 'BB', K], ['RA', 'ST', S]],
@@ -55,7 +57,17 @@ const MODELLE = (() => {
       loads: [{ node: 'ST', fx: 0, fy: -800 }],
       margin: [0.5, 0.8, 1.4, 1.5], dim: [1.0, 1.0],
     };
-  })();
-  return { strommast, fahrrad };
+    if (!stuetze) return def;
+    return { ...def, name: 'Fahrradrahmen mit Sattelstütze',
+      note: 'Derselbe ' + rahmen + 'oben auf der Sattelstütze (Stahlrohr 27,2 × 1,2 angenommen, 200 mm über dem Sitzknoten in ' +
+        'Richtung Sitzrohr). Die Last greift jetzt neben dem Knoten an: Im Rahmen biegen sich Sattelstütze und Sitzrohr, das ' +
+        'Moment verteilt sich am Sitzknoten auf Sitzrohr, Oberrohr und Sitzstreben. Als Fachwerk ist er beweglich, weil die ' +
+        'Stütze nur an einem Knoten hängt und um ihn kippt. Mit der Last am Sitzknoten: Link #modell-fahrrad.',
+      material: { ...def.material, profiles: [...profiles, rohr(27.2, 1.2, 1.35)] },
+      nodes: { ...def.nodes, SA: dm(...SA) }, model: 'frame',
+      members: [...def.members, ['ST', 'SA', P]], loads: [{ node: 'SA', fx: 0, fy: -800 }] };
+  }
+  const fahrrad = rad(false), fahrradsattel = rad(true);
+  return { strommast, fahrrad, fahrradsattel };
 })();
 if (typeof module !== 'undefined') module.exports = MODELLE;
