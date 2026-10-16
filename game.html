@@ -3112,6 +3112,20 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
     controls(); render(); mpRender();
     if (mp.role === 'host') hostSync();   // waren alle anderen schon fertig, startet jetzt die Auflösung
   }
+  // Abgabe zurückziehen und weiterbauen, solange die Runde läuft; ab 3 s vor Schluss nicht mehr (dann gibt das Spiel ohnehin
+  // automatisch ab). Hat die Spielleitung die Auflösung schon angestoßen, weil alle fertig waren, bricht hostSync sie ab.
+  const canWithdraw = () => {
+    const g = mp.role === 'host' ? mp.g : hostG();
+    return plays() && mp.sub && !!g && g.ph === 'design' && g.rid === mp.rid && g.left > 3;
+  };
+  function playerWithdraw() {
+    if (!canWithdraw()) return;
+    mp.sub = false;
+    st.phase = 'design';
+    pres({ r: mp.rid, s: 0, d: null });
+    controls(); render(); mpRender();
+    if (mp.role === 'host') hostSync();
+  }
   function playerSync() {
     const g = hostG();
     if (!g) return;
@@ -3181,10 +3195,11 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
   function hostSync() {
     const other = hostPeer();
     mp.conflict = !!other && (other.presence.j < mp.j || (other.presence.j === mp.j && other.peer < myPeer()));
-    if (mp.g.ph === 'design' && !mp.revealTimer) {
+    if (mp.g.ph === 'design') {
       const ps = players();
-      if ((ps.length || mp.hp) && ps.every(p => p.presence.r === mp.g.rid && p.presence.s === 1) && (!mp.hp || mp.sub))
-        mp.revealTimer = setTimeout(hostReveal, 800);
+      const all = (ps.length || mp.hp) && ps.every(p => p.presence.r === mp.g.rid && p.presence.s === 1) && (!mp.hp || mp.sub);
+      if (all && !mp.revealTimer) mp.revealTimer = setTimeout(hostReveal, 800);
+      if (!all && mp.revealTimer) { clearTimeout(mp.revealTimer); mp.revealTimer = null; }   // jemand hat zurückgezogen
     }
   }
   // Alle Entwürfe einsammeln, rechnen, werten und die Rangliste für alle veröffentlichen.
@@ -3438,6 +3453,8 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
       <h3>Live-Rangliste</h3><div id="mp-top"></div>`,
     'p-locked': () => `<p class="mp-net" id="mp-net"></p>
       <p><b>Abgegeben.</b> Die Auflösung startet, sobald alle fertig sind oder die Zeit abläuft.</p>
+      <div class="actions"><button class="btn" type="button" data-act="withdraw" id="mp-wd">Abgabe zurückziehen</button></div>
+      <p class="mp-note" id="mp-wd-note">Wollen Sie noch etwas ändern? Bis kurz vor Schluss können Sie zurückziehen und weiterbauen.</p>
       <p id="mp-msg"></p>
       <h3>Live-Rangliste</h3><div id="mp-top"></div>`,
     'p-result': () => `<p class="mp-net" id="mp-net"></p>
@@ -3469,7 +3486,8 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
       <button class="btn" type="button" data-act="end">Spiel beenden</button>`,
     'h-design': () => `<p class="mp-net" id="mp-net"></p>
       <p><b>Runde ${mp.g.rid}: ${roundText()}</b> läuft.</p>
-      ${mp.hp ? '<p><b>Ihr Entwurf ist abgegeben.</b></p>' : ''}
+      ${mp.hp ? '<p><b>Ihr Entwurf ist abgegeben.</b></p><div class="actions"><button class="btn" type="button" data-act="withdraw" id="mp-wd">' +
+        'Abgabe zurückziehen</button></div>' : ''}
       <p id="mp-msg"></p>
       <ul class="chips" id="mp-chips"></ul>
       <p class="mp-note">Hinter den Namen: Masse des aktuellen Entwurfs, grün heißt: hält gerade.</p>
@@ -3589,6 +3607,11 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
       set('mp-wait', esc(t)); set('mp-msg', esc(t));
       set('mp-chips', `<li class="done">${esc(mp.name)} (Sie)</li>` + chips(false));
     }
+    if ($('mp-wd')) {   // Zurückziehen nur, solange noch Zeit ist
+      const ok = canWithdraw();
+      $('mp-wd').disabled = !ok;
+      if ($('mp-wd-note') && !ok) $('mp-wd-note').textContent = 'Die Zeit ist fast um, zurückziehen geht nicht mehr.';
+    }
     if (scr === 'p-design' || scr === 'p-locked' || scr === 'h-play') {
       set('mp-msg', `${ps.filter(done).length + (mp.sub ? 1 : 0)} von ${ps.length + 1} haben abgegeben.`);
       set('mp-top', liveTop(rid));
@@ -3679,7 +3702,7 @@ if (typeof module !== 'undefined') module.exports = MODELLE;
     if (st.li === CUSTOM && !st.def.code) openEditor(); else loadLevel(st.li, st.def.nr || st.def.code);   // im Baukasten dort weiter
   }
 
-  const ACTS = { join: joinRoom, host: () => hostGame(false), resume: () => hostGame(true), submit: playerSubmit, undo, clear: clearAll,
+  const ACTS = { join: joinRoom, host: () => hostGame(false), resume: () => hostGame(true), submit: playerSubmit, withdraw: playerWithdraw, undo, clear: clearAll,
     leave: () => leaveRoom(false), end: () => leaveRoom(true), start: hostStart, now: hostEndNow, next: hostNext,
     zoom: b => zoomTo(+b.dataset.i), zprev: () => zoomTo(mp.zoom - 1), znext: () => zoomTo(mp.zoom + 1), zback: zoomEnd,
     zt: () => zoomModel('truss'), zf: () => zoomModel('frame'), lt: () => look('truss'), lf: () => look('frame'), all: playerAll, mine: playerMine };
