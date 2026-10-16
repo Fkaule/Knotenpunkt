@@ -1,8 +1,8 @@
 /* FE-Kern für Stabwerke: ebene Stäbe zwischen Rasterknoten, wahlweise als Fachwerk (Gelenkknoten, nur Normalkraft)
    oder als Rahmen (biegesteife Knoten, Euler-Bernoulli-Balken). Linear gerechnet, dazu eine Kinematikprüfung und eine
    Stabilitätsprüfung (elastische plus geometrische Steifigkeit). Band-Cholesky. Kein DOM. */
-const FEM = (function make(cfg = {}) {   // cfg: eigener Werkstoff und eigene Querschnitte (E, RE, profiles), siehe free
-  const GRID = 1000;                       // Rasterweite in mm
+const FEM = (function make(cfg = {}) {   // cfg: eigener Werkstoff, eigene Querschnitte und Längeneinheit (E, RE, profiles, grid), siehe free
+  const GRID = cfg.grid ?? 1000;           // Rasterweite in mm (Modelle: Längeneinheit der Knotenlagen)
   const E = cfg.E ?? 210000, RE = cfg.RE ?? 235;   // Stahl S235, MPa
   // Querschnitte: Quadratrohre nach EN 10219-2 (Eckradien außen 2t, innen t), A in mm², I in mm⁴, W in mm³, Masse in kg
   // je mm Stab. Ein Stabwerk ist ein Array mit einem Wert je Stab: 0 kein Stab, sonst die Nummer des Profils (1 bis 3).
@@ -66,7 +66,8 @@ const FEM = (function make(cfg = {}) {   // cfg: eigener Werkstoff und eigene Qu
       opts: { gravity: false, buckling: true } };
   }
 
-  // Modell mit freien Knotenlagen zum Ansehen (nicht zum Bauen), etwa eine Nachrechnung. def: nodes { Name: [x, y] } in m,
+  // Modell mit freien Knotenlagen zum Ansehen (nicht zum Bauen), etwa eine Nachrechnung. def: nodes { Name: [x, y] } in m (mit grid
+  // in make: in Vielfachen von grid mm),
   // members [[Name, Name, Profil]], supports [{ kind, nodes: [Name], side, fix }], loads [{ node: Name, fx, fy }] in N,
   // nsub Elemente je Stab (die Zwischenknoten sind Durchlaufstellen). Die Koordinaten werden so verschoben, dass die linke
   // untere Ecke bei (0, 0) liegt. Ergebnis { L, on }: L wie bei level(), mit L.def in Koordinaten fürs Zeichnen (nx, ny:

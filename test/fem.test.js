@@ -334,3 +334,18 @@ test("Modell zum Ansehen: Strommast mit eigenem Werkstoff wie die Nachrechnung, 
   near(r.ncr[r.maxBar], Math.PI ** 2 * 200000 * Math.PI * 20 ** 4 / 64 / 4031.1 ** 2, 1e-3, "Knicklast mit E = 200 GPa, Stablänge 4,03 m");
   assert.strictEqual(FEM.E, 210000); assert.strictEqual(FEM.PROFILES.length, 3);   // die Instanz der Bauteile ist unverändert
 });
+
+test("Modell zum Ansehen: Fahrradrahmen in dm, Lagerkräfte wie von Hand, Fachwerk und Rahmen fast gleiche Stabkräfte", () => {
+  const M = require("../src/modelle.js").fahrrad, K = FEM.make(M.material), { L, on } = K.free(M);
+  near(L.bars.reduce((a, b, k) => a + (on[k] === 3 ? b.len : 0), 0), 410, 1e-9, "Kettenstreben 410 mm (Raster 100 mm)");
+  const t = K.analyze(L, on, "truss"), r = K.analyze(L, on, "frame");
+  assert.ok(t.ok && r.ok, "hält als Fachwerk und als Rahmen"); assert.strictEqual(K.members(L, t.fe).length, 5, "5 Stäbe");
+  const x = n => M.nodes[n][0] * 100, vorn = 800 * (x("ST") - x("RA")) / (x("H") - x("RA"));
+  for (const res of [t, r]) {
+    const R = new Map(res.react.map(([n, , fy]) => [n, fy]));
+    near(R.get(L.supportNodes[1]), vorn, 1e-9, "Steuerrohr aus dem Momentengleichgewicht um die Hinterachse");
+    near(R.get(L.supportNodes[0]), 800 - vorn, 1e-9, "Hinterachse");
+  }
+  for (const m of K.members(L, t.fe)) near(r.N[m[0]], t.N[m[0]], 0.01, "Stabkraft im Rahmen wie im Fachwerk (auf 1 %)");
+  assert.strictEqual(FEM.GRID, 1000);   // die Instanz der Bauteile ist unverändert
+});

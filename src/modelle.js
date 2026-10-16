@@ -24,6 +24,38 @@ const MODELLE = (() => {
     loads: [{ node: 'tR', fx: 0, fy: -3240 }],
     margin: [0.5, 1.2, 1.9, 1.0], dim: [1.45, 0.7],
   };
-  return { strommast };
+  // Fahrradrahmen: klassischer Diamantrahmen aus Stahl, Größe etwa 56 cm (Sitzrohr 73,5°, Steuerrohr 73°, Oberrohr bis
+  // zur Mitte des Steuerrohrs, Kettenstreben 410 mm, Tretlager 70 mm unter der Hinterachse), vereinfacht wie in der TM: das
+  // Steuerrohr ist ein Knoten in seiner Mitte, dort das Loslager (ohne Gabel und Vorderrad). So sind es zwei Dreiecke, als
+  // Fachwerk statisch bestimmt. Knotenlagen in dm (grid 100 mm), damit Lager und Pfeile zur Größe passen. Ketten- und
+  // Sitzstreben sind Paare: in der Ebene ein Stab mit doppeltem Querschnitt. Rohre ohne Konifizierung.
+  const fahrrad = (() => {
+    const z = x => String(x).replace('.', ',');
+    const rohr = (D, t, w, paar) => {
+      const di = D - 2 * t, A = Math.PI / 4 * (D * D - di * di), I = Math.PI / 64 * (D ** 4 - di ** 4), n = paar ? 2 : 1;
+      return { name: `${paar ? '2 × ' : ''}Rohr ${z(D)} × ${z(t)}`, b: `Ø${z(D)}${paar ? ' (Paar)' : ''}`, A: n * A, I: n * I, W: n * 2 * I / D,
+        kgmm: n * A * 7.85e-6, w };
+    };
+    const deg = Math.PI / 180, sitz = 73.5 * deg, lenk = 73 * deg, dm = (x, y) => [x * 10, y * 10];
+    const ST = [-0.55 / Math.tan(sitz), 0.55], H = [0.39 + 0.07 * Math.cos(lenk), 0.55 - 0.07 * Math.sin(lenk)];   // Steuerrohr 140 mm, Mitte
+    const RA = [-Math.sqrt(0.41 ** 2 - 0.07 ** 2), 0.07];
+    const U = 1, O = 2, K = 3, S = 4;   // Sitz- und Unterrohr, Oberrohr, Ketten-, Sitzstreben
+    return {
+      name: 'Fahrradrahmen', note: 'Klassischer Diamantrahmen aus Stahl (CrMo, angenommen E = 210 GPa, Re = 600 MPa, Rohre ohne ' +
+        'Konifizierung), Größe etwa 56 cm, vereinfacht wie in der TM: Das Steuerrohr ist ein Knoten, dort sitzt das Loslager. ' +
+        'Hinterachse Festlager. Fahrer etwa 80 kg (800 N) ganz auf dem Sattel, statisch, am Sitzknoten. Ketten- und Sitzstreben ' +
+        'sind Paare, in der Ebene zusammengefasst. Zwei Dreiecke: als Fachwerk statisch bestimmt, als Rahmen mit Biegung in den ' +
+        'steifen Knoten.',
+      material: { E: 210000, RE: 600, grid: 100,
+        profiles: [rohr(28.6, 0.8, 1.4), rohr(25.4, 0.8, 1.25), rohr(22, 0.8, 1.1, 1), rohr(16, 0.8, 0.8, 1)] },
+      nodes: { BB: [0, 0], RA: dm(...RA), ST: dm(...ST), H: dm(...H) },
+      nsub: 6, opts: { gravity: false, buckling: true }, model: 'truss',
+      members: [['BB', 'ST', U], ['BB', 'H', U], ['ST', 'H', O], ['RA', 'BB', K], ['RA', 'ST', S]],
+      supports: [{ kind: 'fest', nodes: ['RA'], side: 'bottom', fix: 3 }, { kind: 'los', nodes: ['H'], side: 'bottom', fix: 2 }],
+      loads: [{ node: 'ST', fx: 0, fy: -800 }],
+      margin: [0.5, 0.8, 1.4, 1.5], dim: [1.0, 1.0],
+    };
+  })();
+  return { strommast, fahrrad };
 })();
 if (typeof module !== 'undefined') module.exports = MODELLE;

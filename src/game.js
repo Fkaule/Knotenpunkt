@@ -2,7 +2,7 @@
    technischen Zeichnung. */
 (FEM0 => {
   let FEM = FEM0;   // in der Ansicht eines Modells eine Instanz mit dessen Werkstoff und Querschnitten (siehe openModel)
-  const { GRID, PROFILES } = FEM;
+  const { PROFILES } = FEM;
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d'), wrap = $('wrap');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,7 +68,7 @@
   // Stäbe zählen wie in der Statik: Ein gerader Stabzug über Durchlaufstellen ist ein Stab (FEM.members). on: Profil je
   // Rasterstab, nur die, die zählen. count: Zahl der Stäbe, text: nach Profil, Stäbe mit wechselndem Profil als „gemischt“
   function barsOf(on) {
-    const ms = FEM.members(st.L, on), n = [0, 0, 0];
+    const ms = FEM.members(st.L, on), n = FEM.PROFILES.map(() => 0);
     let mixed = 0;
     for (const m of ms) if (m.every(k => on[k] === on[m[0]])) n[on[m[0]] - 1]++; else mixed++;
     const parts = n.map((c, p) => c ? `${c} × ${FEM.PROFILES[p].b}` : '').filter(Boolean);
@@ -86,7 +86,11 @@
 
   // ---------- Geometrie ----------
   const kN = ld => Math.round(Math.hypot(ld.fx, ld.fy) / 100) / 10;
-  const kNtxt = ld => ld.unknown ? '?' : `${fmt(kN(ld), kN(ld) % 1 ? 1 : 0)} kN`;   // unknown: im Baukasten noch nicht bemessen
+  const kNtxt = ld => {   // unter 1 kN (Modelle) auf 0,01 kN; unknown: im Baukasten noch nicht bemessen
+    if (ld.unknown) return '?';
+    const c = Math.round(Math.hypot(ld.fx, ld.fy) / 10), v = c < 100 ? c / 100 : kN(ld);
+    return `${fmt(v, c < 100 && c % 10 ? 2 : v % 1 ? 1 : 0)} kN`;
+  };
   const sameLoads = d => d.loads.every(l => l.fx === d.loads[0].fx && l.fy === d.loads[0].fy);
   const loadText = d => d.loads.length === 1 ? `F = ${kNtxt(d.loads[0])}`
     : sameLoads(d) ? `${d.loads.length} × ${kNtxt(d.loads[0])}` : d.loads.map(kNtxt).join(', ');
@@ -193,14 +197,14 @@
   // Knotenlage in Pixel mit überhöhter Verschiebung (scale: Überhöhung, u in mm)
   const nodeXY = (r, n, scale) => {
     const [x, y] = P(st.L.ij[n]);
-    return !scale || !r || !r.disp ? [x, y] : [x + scale * r.disp[n * 3] / GRID * G.s, y - scale * r.disp[n * 3 + 1] / GRID * G.s];
+    return !scale || !r || !r.disp ? [x, y] : [x + scale * r.disp[n * 3] / FEM.GRID * G.s, y - scale * r.disp[n * 3 + 1] / FEM.GRID * G.s];
   };
   // Punkte eines verformten Stabs: Fachwerk gerade, Rahmen als Biegelinie (kubisch, aus Knotenverschiebung und -verdrehung)
   function barPts(r, k, scale) {
     const b = st.L.bars[k], A = nodeXY(r, b.a, scale), B = nodeXY(r, b.b, scale);
     if (r.model !== 'frame' || !scale) return [A, B];
     const d = r.disp, ul = FEM.localU(b, [d[b.a * 3], d[b.a * 3 + 1], d[b.a * 3 + 2], d[b.b * 3], d[b.b * 3 + 1], d[b.b * 3 + 2]]);
-    const [x0, y0] = P(st.L.ij[b.a]), [x1, y1] = P(st.L.ij[b.b]), Lb = b.len, f = scale / GRID * G.s, out = [];
+    const [x0, y0] = P(st.L.ij[b.a]), [x1, y1] = P(st.L.ij[b.b]), Lb = b.len, f = scale / FEM.GRID * G.s, out = [];
     for (let i = 0; i <= 10; i++) {
       const t = i / 10, ax = (1 - t) * ul[0] + t * ul[3];
       const v = (1 - 3 * t * t + 2 * t ** 3) * ul[1] + (t - 2 * t * t + t ** 3) * Lb * ul[2] + (3 * t * t - 2 * t ** 3) * ul[4] + (t ** 3 - t * t) * Lb * ul[5];
@@ -210,7 +214,7 @@
     return out;
   }
   const maxDisp = r => { let m = 0; for (let n = 0; n < st.L.nN; n++) m = Math.max(m, Math.hypot(r.disp[n * 3], r.disp[n * 3 + 1])); return m; };
-  const size = () => Math.max(st.def.nx, st.def.ny) * GRID;   // größte Abmessung des Bauteils in mm
+  const size = () => Math.max(st.def.nx, st.def.ny) * FEM.GRID;   // größte Abmessung des Bauteils in mm
   function niceScale(r) {
     const m = maxDisp(r);
     if (!m) return 0;
@@ -367,7 +371,7 @@
   const ZUG = 'rgb(44,110,214)', DRUCK = 'rgb(222,50,42)', BIEGUNG = 'rgb(138,76,196)';
   // Normalkraft null laut Rechnung (r.zero): 1 echter Nullstab, 2 nur Biegung (Rahmen). Eine kleine Kraft ist keins von beiden.
   const nullStab = (r, k) => r.zero[k] === 1, ohneN = (r, k) => r.zero[k] > 0;
-  const kNnum = n => fmt(n / 1000, n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer Nachkommastelle
+  const kNnum = n => fmt(n / 1000, n < 995 ? 2 : n < 9950 ? 1 : 0);   // N in kN, unter 10 kN mit einer, unter 1 kN mit zwei Nachkommastellen
   // Zahl mit zwei geltenden Ziffern, damit ein kleiner Wert nicht wie null aussieht; unter 0,001 mit Zehnerpotenz
   const HOCH = '⁰¹²³⁴⁵⁶⁷⁸⁹';
   function sig(v) {
@@ -436,7 +440,7 @@
       for (const [c, members] of groups) {
         let rx = 0, ry = 0, mz = 0;
         for (const q of members) {
-          const [x, y, z] = byNode.get(q), dx = (st.L.ij[q][0] - st.L.ij[c][0]) * GRID, dy = (st.L.ij[q][1] - st.L.ij[c][1]) * GRID;
+          const [x, y, z] = byNode.get(q), dx = (st.L.ij[q][0] - st.L.ij[c][0]) * FEM.GRID, dy = (st.L.ij[q][1] - st.L.ij[c][1]) * FEM.GRID;
           rx += x; ry += y; mz += z + dx * y - dy * x;
         }
         list.push([c, rx, ry, mz]);
@@ -660,9 +664,9 @@
     ctx.stroke();
     head(x0, yd0, -1, 0); head(x1, yd0, 1, 0); head(xd0, y0, 0, 1); head(xd0, yt, 0, -1);
     ctx.font = `500 ${Math.max(11, s * 0.19)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(String(d.nx * GRID), (x0 + x1) / 2, yd0 - 3);
+    ctx.fillText(String(Math.round(d.nx * FEM.GRID)), (x0 + x1) / 2, yd0 - 3);
     ctx.translate(xd0 + sx * 3, (y0 + yt) / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = right ? 'top' : 'bottom';
-    ctx.fillText(String(d.ny * GRID), 0, 0);
+    ctx.fillText(String(Math.round(d.ny * FEM.GRID)), 0, 0);
     ctx.restore();
   }
 
@@ -724,6 +728,7 @@
   }
   const legend = on => { $('legend').hidden = !on; $('werte-row').hidden = !on; };   // Werte-Auswahl nur, wenn Farben zu sehen sind
 
+  const mTxt = x => { const m = x * FEM.GRID / 1000, k = m % 1 ? (m * 10) % 1 ? 2 : 1 : 0; return fmt(m, k); };   // Abmessung eines Modells in m
   const TB_MAT = $('tb-mat').textContent, TB_PROF = $('tb-prof').textContent;   // Schriftfeld der Bauteile; Modelle haben eigene
   function panel() {
     if (st.phase === 'edit') return edPanel();
@@ -733,7 +738,7 @@
     $('tb-load').textContent = loadText(d) + (L.opts.gravity ? ' + Eigengewicht' : '');
     $('tb-mat').textContent = st.phase === 'view' ? `E = ${fmt(FEM.E / 1000)} GPa, Re = ${fmt(FEM.RE)} MPa` : TB_MAT;
     $('tb-prof').textContent = st.phase === 'view' ? [...new Set(FEM.PROFILES.map(q => q.name))].join(', ') : TB_PROF;
-    $('tb-size').textContent = st.phase === 'view' ? `${fmt(d.nx, d.nx % 1 ? 1 : 0)} × ${fmt(d.ny, d.ny % 1 ? 1 : 0)} m, freie Geometrie` : `${d.nx} × ${d.ny} m, Raster 1 m`;
+    $('tb-size').textContent = st.phase === 'view' ? `${mTxt(d.nx)} × ${mTxt(d.ny)} m, freie Geometrie` : `${d.nx} × ${d.ny} m, Raster 1 m`;
     const b = barsOf(inSet(on, conn));
     $('tb-bars').textContent = `${b.count}: ${b.text}`;
     const m = st.view && st.view.res ? st.view.res.model : mp.on && st.look ? st.look : st.model;   // das gezeigte Modell
@@ -914,7 +919,7 @@
     if (st.phase === 'view') fall = null;   // in der Ansicht bleibt alles stehen
     let scale = 0;
     if (stress) scale = niceScale(r);
-    if (mech) { const m = maxDisp(r); scale = m ? 0.45 * GRID / m : 0; }
+    if (mech) { const m = maxDisp(r); scale = m ? 0.45 * FEM.GRID / m : 0; }
     const v = st.view = { mode: 'result', res: r, on, scale, sweep: stress && full ? 0 : 1, defo: 0, t: 0,
       loose: { set: loose, p: 0 }, fall: fall && { set: fall, p: 0 } };
     showFem(r, stress ? scale : 0);
